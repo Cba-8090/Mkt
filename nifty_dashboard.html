@@ -1030,6 +1030,8 @@
     // Update both datasets
     optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
     optionsChart.data.datasets[1].data.push(data.options_data.total_flow || 0);
+    optionsChart.data.datasets[2].data.push(data.options_data.bullish_flow || 0);    // Bullish Flow
+    optionsChart.data.datasets[3].data.push(data.options_data.bearish_flow || 0);    // Bearish Flow
 
     // Keep only last 20 data points
     if (optionsChart.data.labels.length > 20) {
