@@ -789,6 +789,259 @@
             }).join('');
     }
 
+
+    // Fetch data from backend
+async function fetchDataFromBackend() {
+    const response = await fetch('/api/unified-data');
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+}
+
+// Update dashboard with data
+function updateDashboard(data) {
+    if (!data) return;
+
+    // Update futures data
+    if (data.futures_data) {
+        updateElement('weightedMoneyFlow', formatNumber(data.futures_data.weighted_money_flow));
+        updateElement('positiveFlow', formatNumber(data.futures_data.weighted_positive_money_flow));
+        updateElement('negativeFlow', formatNumber(data.futures_data.weighted_negative_money_flow));
+        updateElement('cumulativeFlow', formatNumber(data.futures_data.cumulative_weighted_money_flow));
+    }
+
+    // Update options data
+    if (data.options_data) {
+        updateElement('netFlow', formatNumber(data.options_data.net_flow));
+        updateElement('sentiment', data.options_data.sentiment);
+        updateElement('bullishFlow', formatNumber(data.options_data.bullish_flow));
+        updateElement('bearishFlow', formatNumber(data.options_data.bearish_flow));
+    }
+
+    // Update gamma data
+    if (data.gamma_data) {
+        updateElement('supportPressure', formatNumber(data.gamma_data.support_pressure));
+        updateElement('resistancePressure', formatNumber(data.gamma_data.resistance_pressure));
+        updateElement('srRatio', data.gamma_data.sr_ratio?.toFixed(2));
+        updateElement('maxPressureStrike', formatNumber(data.gamma_data.max_pressure_strike));
+
+        updateSupportResistanceLevels(data.gamma_data);
+        updateBreakdownSignals(data.gamma_data.breakdown_signals || []);
+    }
+
+    // Update spot data
+    if (data.spot_data) {
+        updateElement('spotPrice', formatNumber(data.spot_data.spot_price));
+        updateElement('priceChange', formatNumber(data.spot_data.price_change, true));
+        updateElement('priceChangePercent', `${data.spot_data.price_change_pct?.toFixed(2)}%`);
+    }
+
+    if (data.gamma_data) {
+        updateElement('trendDirection', data.gamma_data.trend_direction);
+        updatePriceReversals(data.gamma_data.price_reversals || []);
+    }
+
+    // Update signals
+    if (data.signals) {
+        updateSignalDisplay(data.signals);
+    }
+
+    // Update charts
+    updateCharts(data);
+}
+
+// Helper function to update elements
+function updateElement(id, value) {
+    const element = document.getElementById(id);
+    if (element && value !== undefined && value !== null) {
+        element.textContent = value;
+
+        // Add color classes based on value
+        if (typeof value === 'string' && value.includes('-')) {
+            element.className = 'metric-value negative';
+        } else if (typeof value === 'number' && value > 0) {
+            element.className = 'metric-value positive';
+        } else {
+            element.className = 'metric-value';
+        }
+    }
+}
+
+// Format numbers for display
+function formatNumber(value, showSign = false) {
+    if (value === undefined || value === null || isNaN(value)) return '--';
+
+    const sign = showSign && value > 0 ? '+' : '';
+
+    if (Math.abs(value) >= 1000000) {
+        return sign + (value / 1000000).toFixed(1) + 'M';
+    } else if (Math.abs(value) >= 1000) {
+        return sign + (value / 1000).toFixed(1) + 'K';
+    } else {
+        return sign + value.toFixed(0);
+    }
+}
+
+// Update support and resistance levels
+function updateSupportResistanceLevels(gammaData) {
+    const supportContainer = document.getElementById('supportLevels');
+    const resistanceContainer = document.getElementById('resistanceLevels');
+
+    if (supportContainer) {
+        const supportLevels = gammaData.support_levels || [];
+        supportContainer.innerHTML = supportLevels.length > 0 ?
+            supportLevels.map(level => `<div class="level-item support-level">${formatNumber(level)}</div>`).join('') :
+            '<div style="color: #999;">No support levels</div>';
+    }
+
+    if (resistanceContainer) {
+        const resistanceLevels = gammaData.resistance_levels || [];
+        resistanceContainer.innerHTML = resistanceLevels.length > 0 ?
+            resistanceLevels.map(level => `<div class="level-item resistance-level">${formatNumber(level)}</div>`).join('') :
+            '<div style="color: #999;">No resistance levels</div>';
+    }
+}
+
+// Update breakdown signals
+function updateBreakdownSignals(signals) {
+    const container = document.getElementById('breakdownSignals');
+    if (!container) return;
+
+    if (signals.length === 0) {
+        container.innerHTML = '<div style="color: #00ff88; text-align: center;">No Breakdown Signals</div>';
+        return;
+    }
+
+    container.innerHTML = '<h4 style="color: #ff4444; margin-bottom: 10px;">⚠️ Breakdown Signals</h4>' +
+        signals.slice(-5).map(signal => // Show last 5 signals
+            `<div class="breakdown-item">
+                <span class="breakdown-time">${signal.time}</span>
+                <div style="margin-top: 4px; font-size: 0.9em;">${signal.signal}</div>
+            </div>`
+        ).join('');
+}
+
+// Update price reversals
+function updatePriceReversals(reversals) {
+    const container = document.getElementById('priceReversals');
+    if (!container) return;
+
+    if (reversals.length === 0) {
+        container.innerHTML = '<h4 style="margin-bottom: 10px;">No Recent Reversals</h4>';
+        return;
+    }
+
+    container.innerHTML = '<h4 style="margin-bottom: 10px;">Recent Price Reversals</h4>' +
+        reversals.slice(-5).map(reversal => // Show last 5 reversals
+            `<div class="reversal-item reversal-${reversal.direction.toLowerCase()}">
+                <span>${reversal.time} - ${reversal.direction}</span>
+                <span>${formatNumber(reversal.price)}</span>
+            </div>`
+        ).join('');
+}
+
+// Update signal display
+function updateSignalDisplay(signals) {
+    const signalDisplay = document.getElementById('signalDisplay');
+    const signalDirection = document.getElementById('signalDirection');
+    const signalStrength = document.getElementById('signalStrength');
+    const signalConfidence = document.getElementById('signalConfidence');
+
+    if (signalDirection) signalDirection.textContent = signals.direction || 'NEUTRAL';
+    if (signalStrength) signalStrength.textContent = signals.signal_strength?.toFixed(1) || '0.0';
+    if (signalConfidence) signalConfidence.textContent = Math.round(signals.confidence || 0);
+
+    // Update signal display styling
+    if (signalDisplay) {
+        signalDisplay.className = 'signal-display';
+
+        if (signals.direction === 'Bullish') {
+            signalDisplay.classList.add('signal-bullish');
+        } else if (signals.direction === 'Bearish') {
+            signalDisplay.classList.add('signal-bearish');
+        } else {
+            signalDisplay.classList.add('signal-neutral');
+        }
+    }
+}
+
+// Update charts
+function updateCharts(data) {
+    const timeLabel = new Date().toLocaleTimeString();
+
+    // Update futures chart
+    if (futuresChart && data.futures_data) {
+        futuresChart.data.labels.push(timeLabel);
+        futuresChart.data.datasets[0].data.push(data.futures_data.weighted_money_flow || 0);
+
+        // Keep only last 20 data points
+        if (futuresChart.data.labels.length > 20) {
+            futuresChart.data.labels.shift();
+            futuresChart.data.datasets[0].data.shift();
+        }
+
+        futuresChart.update('none');
+    }
+
+    // Update options chart
+    if (optionsChart && data.options_data) {
+        optionsChart.data.labels.push(timeLabel);
+        optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
+
+        // Keep only last 20 data points
+        if (optionsChart.data.labels.length > 20) {
+            optionsChart.data.labels.shift();
+            optionsChart.data.datasets[0].data.shift();
+        }
+
+        optionsChart.update('none');
+    }
+
+    // Update combined chart
+    if (combinedChart && data.signals) {
+        combinedChart.data.labels.push(timeLabel);
+        combinedChart.data.datasets[0].data.push(data.signals.combined_signal || 0);
+
+        // Keep only last 20 data points
+        if (combinedChart.data.labels.length > 20) {
+            combinedChart.data.labels.shift();
+            combinedChart.data.datasets[0].data.shift();
+        }
+
+        combinedChart.update('none');
+    }
+}
+
+// Update connection status
+function updateConnectionStatus(status, message) {
+    const indicator = document.getElementById('connectionStatus');
+    const text = document.getElementById('connectionText');
+
+    if (indicator) {
+        indicator.className = `status-indicator ${status}`;
+    }
+
+    if (text) {
+        text.textContent = message;
+    }
+}
+
+// Update timestamp
+function updateTimestamp() {
+    const timestampElement = document.getElementById('lastUpdate');
+    if (timestampElement) {
+        timestampElement.textContent = new Date().toLocaleTimeString();
+    }
+}
+
+// Initialize WebSocket (placeholder for future enhancement)
+function initializeWebSocket() {
+    // WebSocket implementation would go here
+    console.log('WebSocket initialization placeholder');
+}
+
+
     // Update price reversals with historical context
     function updatePriceReversalsWithHistory() {
         const container = document.getElementById('priceReversals');

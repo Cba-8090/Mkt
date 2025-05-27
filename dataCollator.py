@@ -3,16 +3,19 @@ import sqlite3
 import json
 import os
 import re
+import pickle  # Added missing import
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 from bs4 import BeautifulSoup
 import time
 import threading
 import logging
+from collections import deque  # Added missing import
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
 
 class NiftyDataIntegrator:
     def __init__(self):
@@ -29,19 +32,18 @@ class NiftyDataIntegrator:
         # Load existing historical data on startup
         self.load_historical_data()
 
-
         # Weights for signal calculation
         self.futures_weight = 0.70
         self.options_weight = 0.30
-        
+
         # Data storage
         self.unified_data = []
         self.latest_data = {}
         self.running = False
-        
+
         # Initialize data structure
         self.initialize_data_structure()
-    
+
     def initialize_data_structure(self):
         """Initialize the unified data structure"""
         self.unified_data_template = {
@@ -177,35 +179,35 @@ class NiftyDataIntegrator:
         except Exception as e:
             logger.error(f"Error loading historical data: {e}")
 
-
     def get_latest_futures_file(self) -> Optional[str]:
         """Get the latest futures data file"""
         try:
-            files = [f for f in os.listdir(self.futures_base_path) if f.startswith('nifty_detailed_') and f.endswith('_5min.csv')]
+            files = [f for f in os.listdir(self.futures_base_path) if
+                     f.startswith('nifty_detailed_') and f.endswith('_5min.csv')]
             if not files:
                 logger.warning("No futures files found")
                 return None
-            
+
             # Sort by date in filename
             files.sort(reverse=True)
             return os.path.join(self.futures_base_path, files[0])
         except Exception as e:
             logger.error(f"Error finding futures file: {e}")
             return None
-    
+
     def read_futures_data(self) -> Dict:
         """Read futures money flow data"""
         file_path = self.get_latest_futures_file()
         if not file_path:
             return {}
-        
+
         try:
             df = pd.read_csv(file_path)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
-            
+
             # Get latest data
             latest = df.iloc[-1]
-            
+
             return {
                 'weighted_positive_money_flow': float(latest['weighted_positive_money_flow']),
                 'weighted_negative_money_flow': float(latest['weighted_negative_money_flow']),
@@ -216,7 +218,7 @@ class NiftyDataIntegrator:
         except Exception as e:
             logger.error(f"Error reading futures data: {e}")
             return {}
-    
+
     def read_options_data(self) -> Dict:
         """Read options money flow data"""
         file_path = os.path.join(self.options_base_path, 'net_money_flow_data.csv')
@@ -247,23 +249,21 @@ class NiftyDataIntegrator:
         except Exception as e:
             logger.error(f"Error reading options data: {e}")
             return {}
-        
+
     def get_latest_gamma_file(self) -> Optional[str]:
         """Get the latest gamma analysis HTML file"""
         try:
-            files = [f for f in os.listdir(self.gamma_base_path) if f.startswith('nifty_comparison_report_') and f.endswith('.html')]
+            files = [f for f in os.listdir(self.gamma_base_path) if
+                     f.startswith('nifty_comparison_report_') and f.endswith('.html')]
             if not files:
                 logger.warning("No gamma files found")
                 return None
-            
+
             files.sort(reverse=True)
             return os.path.join(self.gamma_base_path, files[0])
         except Exception as e:
             logger.error(f"Error finding gamma file: {e}")
             return None
-
-    # Replace the breakdown signals parsing section in your dataCollator.py
-    # Around line 280-320 in the parse_gamma_html method
 
     def parse_gamma_html(self, html_content: str) -> Dict:
         """Parse gamma analysis from HTML content - Clean enhanced version"""
@@ -470,31 +470,31 @@ class NiftyDataIntegrator:
                 'spot_change': 0.0,
                 'trend_direction': 'NEUTRAL'
             }
-    
+
     def read_gamma_data(self) -> Dict:
         """Read gamma analysis data"""
         file_path = self.get_latest_gamma_file()
         if not file_path:
             return {}
-        
+
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
-            
+
             return self.parse_gamma_html(html_content)
-            
+
         except Exception as e:
             logger.error(f"Error reading gamma data: {e}")
             return {}
-    
+
     def read_spot_data(self) -> Dict:
         """Read spot price data from SQLite database"""
         try:
             conn = sqlite3.connect(self.db_path)
-            
+
             # Get today's date
             today = datetime.now().strftime('%Y-%m-%d')
-            
+
             query = """
             SELECT DISTINCT strftime('%H:%M', timestamp) as time, 
                    Spot as spot,
@@ -504,15 +504,15 @@ class NiftyDataIntegrator:
             ORDER BY timestamp DESC 
             LIMIT 1
             """
-            
+
             df = pd.read_sql_query(query, conn, params=[today])
             conn.close()
-            
+
             if df.empty:
                 return {'spot_price': 0.0, 'price_change': 0.0, 'price_change_pct': 0.0}
-            
+
             current_price = float(df.iloc[0]['spot'])
-            
+
             # Calculate price change (you might want to store previous price)
             # For now, using a simple calculation
             return {
@@ -520,28 +520,28 @@ class NiftyDataIntegrator:
                 'price_change': 0.0,  # Calculate based on previous reading
                 'price_change_pct': 0.0  # Calculate based on previous reading
             }
-            
+
         except Exception as e:
             logger.error(f"Error reading spot data: {e}")
             return {'spot_price': 0.0, 'price_change': 0.0, 'price_change_pct': 0.0}
-    
+
     def calculate_combined_signal(self, futures_data: Dict, options_data: Dict) -> Dict:
         """Calculate combined signal using 70/30 weighting"""
         try:
             # Normalize futures signal (-1 to 1)
             futures_signal = futures_data.get('weighted_money_flow', 0.0)
             futures_normalized = max(-1, min(1, futures_signal / 1000000))  # Adjust divisor based on your data scale
-            
+
             # Normalize options signal (-1 to 1)
             options_signal = options_data.get('net_flow', 0.0)
             options_normalized = max(-1, min(1, options_signal / 100000))  # Adjust divisor based on your data scale
-            
+
             # Combined signal with weighting
             combined_signal = (self.futures_weight * futures_normalized) + (self.options_weight * options_normalized)
-            
+
             # Signal strength (0 to 10)
             signal_strength = abs(combined_signal) * 10
-            
+
             # Direction
             if combined_signal > 0.2:
                 direction = 'Bullish'
@@ -549,18 +549,18 @@ class NiftyDataIntegrator:
                 direction = 'Bearish'
             else:
                 direction = 'Neutral'
-            
+
             # Confidence based on agreement between futures and options
             agreement = 1 - abs(futures_normalized - options_normalized) / 2
             confidence = agreement * 100
-            
+
             return {
                 'combined_signal': combined_signal,
                 'signal_strength': signal_strength,
                 'direction': direction,
                 'confidence': confidence
             }
-            
+
         except Exception as e:
             logger.error(f"Error calculating combined signal: {e}")
             return {
@@ -637,21 +637,21 @@ class NiftyDataIntegrator:
             f"Data collection complete. Signal: {signals['direction']} (Strength: {signals['signal_strength']:.1f})")
 
         return unified_data
-    
+
     def get_latest_data(self) -> Dict:
         """Get the latest unified data"""
         return self.latest_data
-    
+
     def get_historical_data(self, hours: int = 24) -> List[Dict]:
         """Get historical data for specified hours"""
         cutoff_time = datetime.now() - timedelta(hours=hours)
         return [data for data in self.unified_data if data['timestamp'] >= cutoff_time]
-    
+
     def export_data_to_json(self, filename: str = None) -> str:
         """Export current data to JSON file"""
         if not filename:
             filename = f"unified_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        
+
         try:
             # Convert datetime objects to strings for JSON serialization
             export_data = []
@@ -659,21 +659,21 @@ class NiftyDataIntegrator:
                 data_copy = data.copy()
                 data_copy['timestamp'] = data_copy['timestamp'].isoformat()
                 export_data.append(data_copy)
-            
+
             with open(filename, 'w') as f:
                 json.dump(export_data, f, indent=2, default=str)
-            
+
             logger.info(f"Data exported to {filename}")
             return filename
-            
+
         except Exception as e:
             logger.error(f"Error exporting data: {e}")
             return ""
-    
+
     def start_continuous_collection(self, interval_minutes: int = 5):
         """Start continuous data collection every N minutes"""
         self.running = True
-        
+
         def collection_loop():
             while self.running:
                 try:
@@ -682,11 +682,11 @@ class NiftyDataIntegrator:
                 except Exception as e:
                     logger.error(f"Error in collection loop: {e}")
                     time.sleep(60)  # Wait 1 minute before retrying
-        
+
         self.collection_thread = threading.Thread(target=collection_loop, daemon=True)
         self.collection_thread.start()
         logger.info(f"Started continuous data collection every {interval_minutes} minutes")
-    
+
     def stop_continuous_collection(self):
         """Stop continuous data collection"""
         self.running = False
@@ -722,8 +722,7 @@ class NiftyDataIntegrator:
             }
         except Exception as e:
             logger.error(f"Error calculating summary stats: {e}")
-            return {}
-
+            
 # Example usage
 if __name__ == "__main__":
     # Initialize the data integrator

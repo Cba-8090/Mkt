@@ -242,28 +242,6 @@ def stop_collection():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/health')
-def health_check():
-    """Health check endpoint"""
-    health_data = {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "integrator_available": INTEGRATOR_AVAILABLE,
-        "mode": "real_data" if INTEGRATOR_AVAILABLE else "simulation"
-    }
-
-    if INTEGRATOR_AVAILABLE:
-        try:
-            health_data.update({
-                "data_collection_running": integrator.running if hasattr(integrator, 'running') else False,
-                "total_data_points": len(integrator.unified_data) if hasattr(integrator, 'unified_data') else 0
-            })
-        except Exception:
-            health_data["integrator_status"] = "error"
-
-    return jsonify(health_data)
-
-
 @app.route('/api/debug')
 def debug_data():
     """Debug endpoint to see raw data structure"""
@@ -283,51 +261,6 @@ def debug_data():
             return jsonify({"error": str(e)})
     else:
         return jsonify({"message": "Integrator not available"})
-
-
-def start_background_collection():
-    """Start data collection in background thread"""
-    if INTEGRATOR_AVAILABLE:
-        print("Starting background data collection...")
-        try:
-            integrator.start_continuous_collection(interval_minutes=5)
-        except Exception as e:
-            print(f"Error starting background collection: {e}")
-            print("🔄 Dashboard will run with simulated data")
-    else:
-        print("📊 Running in simulation mode - no background collection needed")
-
-
-def check_required_files():
-    """Check if required files exist"""
-    required_files = ['nifty_dashboard.html']
-    missing_files = []
-
-    for file in required_files:
-        if not os.path.exists(file):
-            missing_files.append(file)
-
-    if missing_files:
-        print(f"❌ Missing required files: {', '.join(missing_files)}")
-        print("Please ensure all files are in the same directory as flask_server.py")
-        return False
-
-    print("✅ All required files found")
-    return True
-
-
-def test_integrator():
-    """Test the integrator before starting the server"""
-    if INTEGRATOR_AVAILABLE:
-        try:
-            print("🧪 Testing integrator...")
-            data = integrator.collect_unified_data()
-            print(f"✅ Integrator test successful! Signal: {data.get('signals', {}).get('direction', 'Unknown')}")
-            return True
-        except Exception as e:
-            print(f"⚠️ Integrator test failed: {e}")
-            return False
-    return False
 
 
 @app.route('/api/enhanced-data')
@@ -450,7 +383,6 @@ def get_enhanced_stats():
         return jsonify({"error": str(e)}), 500
 
 
-# Update the existing health check to include historical data info
 @app.route('/api/health')
 def health_check():
     """Enhanced health check endpoint"""
@@ -475,6 +407,51 @@ def health_check():
             health_data["integrator_status"] = "error"
 
     return jsonify(health_data)
+
+
+def start_background_collection():
+    """Start data collection in background thread"""
+    if INTEGRATOR_AVAILABLE:
+        print("Starting background data collection...")
+        try:
+            integrator.start_continuous_collection(interval_minutes=5)
+        except Exception as e:
+            print(f"Error starting background collection: {e}")
+            print("🔄 Dashboard will run with simulated data")
+    else:
+        print("📊 Running in simulation mode - no background collection needed")
+
+
+def check_required_files():
+    """Check if required files exist"""
+    required_files = ['nifty_dashboard.html']
+    missing_files = []
+
+    for file in required_files:
+        if not os.path.exists(file):
+            missing_files.append(file)
+
+    if missing_files:
+        print(f"❌ Missing required files: {', '.join(missing_files)}")
+        print("Please ensure all files are in the same directory as flask_server.py")
+        return False
+
+    print("✅ All required files found")
+    return True
+
+
+def test_integrator():
+    """Test the integrator before starting the server"""
+    if INTEGRATOR_AVAILABLE:
+        try:
+            print("🧪 Testing integrator...")
+            data = integrator.collect_unified_data()
+            print(f"✅ Integrator test successful! Signal: {data.get('signals', {}).get('direction', 'Unknown')}")
+            return True
+        except Exception as e:
+            print(f"⚠️ Integrator test failed: {e}")
+            return False
+    return False
 
 
 if __name__ == '__main__':
