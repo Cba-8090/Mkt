@@ -107,7 +107,7 @@
 
         .card-header {
             display: flex;
-            justify-content: between;
+            justify-content: space-between;
             align-items: center;
             margin-bottom: 15px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -226,6 +226,15 @@
         .chart-container {
             height: 200px;
             margin-top: 15px;
+        }
+
+        /* Enhanced chart container for gamma and spot cards */
+        .enhanced-chart-container {
+            height: 150px;
+            margin-top: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 10px;
         }
 
         .breakdown-signals {
@@ -349,16 +358,25 @@
             color: #999;
         }
 
+        /* Chart title styling */
+        .chart-title {
+            font-size: 0.9em;
+            color: #00d4ff;
+            text-align: center;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
         @media (max-width: 1024px) {
             .main-grid {
                 grid-template-columns: 1fr;
                 grid-template-rows: auto;
             }
-            
+
             .signals-card {
                 grid-column: 1;
             }
-            
+
             .status-bar {
                 flex-direction: column;
                 align-items: flex-start;
@@ -467,6 +485,13 @@
                     <span class="metric-label">Max Pressure Strike</span>
                     <span class="metric-value" id="maxPressureStrike">--</span>
                 </div>
+
+                <!-- S/R Ratio Chart -->
+                <div class="enhanced-chart-container">
+                    <div class="chart-title">S/R Ratio Trend</div>
+                    <canvas id="srRatioChart"></canvas>
+                </div>
+
                 <div class="levels-display">
                     <div class="levels-column">
                         <h4 style="color: #00ff88; margin-bottom: 10px;">Support Levels</h4>
@@ -501,6 +526,13 @@
                     <span class="metric-label">Trend Direction</span>
                     <span class="metric-value" id="trendDirection">--</span>
                 </div>
+
+                <!-- Spot Price Chart -->
+                <div class="enhanced-chart-container">
+                    <div class="chart-title">Spot Price Movement</div>
+                    <canvas id="spotPriceChart"></canvas>
+                </div>
+
                 <div class="price-reversals" id="priceReversals"></div>
             </div>
 
@@ -525,7 +557,7 @@
     // Enhanced global variables for persistence
     let autoRefresh = true;
     let refreshInterval;
-    let futuresChart, optionsChart, combinedChart;
+    let futuresChart, optionsChart, combinedChart, srRatioChart, spotPriceChart;
     let historicalData = [];
     let allBreakdownSignals = []; // Persistent breakdown signals
     let allPriceReversals = [];   // Persistent price reversals
@@ -789,216 +821,228 @@
             }).join('');
     }
 
-
     // Fetch data from backend
-async function fetchDataFromBackend() {
-    const response = await fetch('/api/unified-data');
-    if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-}
-
-// Update dashboard with data
-function updateDashboard(data) {
-    if (!data) return;
-
-    // Update futures data
-    if (data.futures_data) {
-        updateElement('weightedMoneyFlow', formatNumber(data.futures_data.weighted_money_flow));
-        updateElement('positiveFlow', formatNumber(data.futures_data.weighted_positive_money_flow));
-        updateElement('negativeFlow', formatNumber(data.futures_data.weighted_negative_money_flow));
-        updateElement('cumulativeFlow', formatNumber(data.futures_data.cumulative_weighted_money_flow));
+    async function fetchDataFromBackend() {
+        const response = await fetch('/api/unified-data');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
     }
 
-    // Update options data
-    if (data.options_data) {
-        updateElement('netFlow', formatNumber(data.options_data.net_flow));
-        updateElement('sentiment', data.options_data.sentiment);
-        updateElement('bullishFlow', formatNumber(data.options_data.bullish_flow));
-        updateElement('bearishFlow', formatNumber(data.options_data.bearish_flow));
+    // Update dashboard with data
+    function updateDashboard(data) {
+        if (!data) return;
+
+        // Update futures data
+        if (data.futures_data) {
+            updateElement('weightedMoneyFlow', formatNumber(data.futures_data.weighted_money_flow));
+            updateElement('positiveFlow', formatNumber(data.futures_data.weighted_positive_money_flow));
+            updateElement('negativeFlow', formatNumber(data.futures_data.weighted_negative_money_flow));
+            updateElement('cumulativeFlow', formatNumber(data.futures_data.cumulative_weighted_money_flow));
+        }
+
+        // Update options data
+        if (data.options_data) {
+            updateElement('netFlow', formatNumber(data.options_data.net_flow));
+            updateElement('sentiment', data.options_data.sentiment);
+            updateElement('bullishFlow', formatNumber(data.options_data.bullish_flow));
+            updateElement('bearishFlow', formatNumber(data.options_data.bearish_flow));
+        }
+
+        // Update gamma data
+        if (data.gamma_data) {
+            updateElement('supportPressure', formatNumber(data.gamma_data.support_pressure));
+            updateElement('resistancePressure', formatNumber(data.gamma_data.resistance_pressure));
+            updateElement('srRatio', data.gamma_data.sr_ratio?.toFixed(2));
+            updateElement('maxPressureStrike', formatNumber(data.gamma_data.max_pressure_strike));
+
+            updateSupportResistanceLevels(data.gamma_data);
+            updateBreakdownSignals(data.gamma_data.breakdown_signals || []);
+        }
+
+        // Update spot data
+        if (data.spot_data) {
+            updateElement('spotPrice', formatNumber(data.spot_data.spot_price));
+            updateElement('priceChange', formatNumber(data.spot_data.price_change, true));
+            updateElement('priceChangePercent', `${data.spot_data.price_change_pct?.toFixed(2)}%`);
+        }
+
+        if (data.gamma_data) {
+            updateElement('trendDirection', data.gamma_data.trend_direction);
+            updatePriceReversals(data.gamma_data.price_reversals || []);
+        }
+
+        // Update signals
+        if (data.signals) {
+            updateSignalDisplay(data.signals);
+        }
+
+        // Update charts
+        updateCharts(data);
     }
 
-    // Update gamma data
-    if (data.gamma_data) {
-        updateElement('supportPressure', formatNumber(data.gamma_data.support_pressure));
-        updateElement('resistancePressure', formatNumber(data.gamma_data.resistance_pressure));
-        updateElement('srRatio', data.gamma_data.sr_ratio?.toFixed(2));
-        updateElement('maxPressureStrike', formatNumber(data.gamma_data.max_pressure_strike));
+    // Helper function to update elements
+    function updateElement(id, value) {
+        const element = document.getElementById(id);
+        if (element && value !== undefined && value !== null) {
+            element.textContent = value;
 
-        updateSupportResistanceLevels(data.gamma_data);
-        updateBreakdownSignals(data.gamma_data.breakdown_signals || []);
-    }
-
-    // Update spot data
-    if (data.spot_data) {
-        updateElement('spotPrice', formatNumber(data.spot_data.spot_price));
-        updateElement('priceChange', formatNumber(data.spot_data.price_change, true));
-        updateElement('priceChangePercent', `${data.spot_data.price_change_pct?.toFixed(2)}%`);
-    }
-
-    if (data.gamma_data) {
-        updateElement('trendDirection', data.gamma_data.trend_direction);
-        updatePriceReversals(data.gamma_data.price_reversals || []);
-    }
-
-    // Update signals
-    if (data.signals) {
-        updateSignalDisplay(data.signals);
-    }
-
-    // Update charts
-    updateCharts(data);
-}
-
-// Helper function to update elements
-function updateElement(id, value) {
-    const element = document.getElementById(id);
-    if (element && value !== undefined && value !== null) {
-        element.textContent = value;
-
-        // Add color classes based on value
-        if (typeof value === 'string' && value.includes('-')) {
-            element.className = 'metric-value negative';
-        } else if (typeof value === 'number' && value > 0) {
-            element.className = 'metric-value positive';
-        } else {
-            element.className = 'metric-value';
+            // Add color classes based on value
+            if (typeof value === 'string' && value.includes('-')) {
+                element.className = 'metric-value negative';
+            } else if (typeof value === 'number' && value > 0) {
+                element.className = 'metric-value positive';
+            } else {
+                element.className = 'metric-value';
+            }
         }
     }
-}
 
-// Format numbers for display
-function formatNumber(value, showSign = false) {
-    if (value === undefined || value === null || isNaN(value)) return '--';
+    // Format numbers for display
+    function formatNumber(value, showSign = false) {
+        if (value === undefined || value === null || isNaN(value)) return '--';
 
-    const sign = showSign && value > 0 ? '+' : '';
+        const sign = showSign && value > 0 ? '+' : '';
 
-    if (Math.abs(value) >= 1000000) {
-        return sign + (value / 1000000).toFixed(1) + 'M';
-    } else if (Math.abs(value) >= 1000) {
-        return sign + (value / 1000).toFixed(1) + 'K';
-    } else {
-        return sign + value.toFixed(0);
-    }
-}
-
-// Update support and resistance levels
-function updateSupportResistanceLevels(gammaData) {
-    const supportContainer = document.getElementById('supportLevels');
-    const resistanceContainer = document.getElementById('resistanceLevels');
-
-    if (supportContainer) {
-        const supportLevels = gammaData.support_levels || [];
-        supportContainer.innerHTML = supportLevels.length > 0 ?
-            supportLevels.map(level => `<div class="level-item support-level">${formatNumber(level)}</div>`).join('') :
-            '<div style="color: #999;">No support levels</div>';
-    }
-
-    if (resistanceContainer) {
-        const resistanceLevels = gammaData.resistance_levels || [];
-        resistanceContainer.innerHTML = resistanceLevels.length > 0 ?
-            resistanceLevels.map(level => `<div class="level-item resistance-level">${formatNumber(level)}</div>`).join('') :
-            '<div style="color: #999;">No resistance levels</div>';
-    }
-}
-
-// Update breakdown signals
-function updateBreakdownSignals(signals) {
-    const container = document.getElementById('breakdownSignals');
-    if (!container) return;
-
-    if (signals.length === 0) {
-        container.innerHTML = '<div style="color: #00ff88; text-align: center;">No Breakdown Signals</div>';
-        return;
-    }
-
-    container.innerHTML = '<h4 style="color: #ff4444; margin-bottom: 10px;">⚠️ Breakdown Signals</h4>' +
-        signals.slice(-5).map(signal => // Show last 5 signals
-            `<div class="breakdown-item">
-                <span class="breakdown-time">${signal.time}</span>
-                <div style="margin-top: 4px; font-size: 0.9em;">${signal.signal}</div>
-            </div>`
-        ).join('');
-}
-
-// Update price reversals
-function updatePriceReversals(reversals) {
-    const container = document.getElementById('priceReversals');
-    if (!container) return;
-
-    if (reversals.length === 0) {
-        container.innerHTML = '<h4 style="margin-bottom: 10px;">No Recent Reversals</h4>';
-        return;
-    }
-
-    container.innerHTML = '<h4 style="margin-bottom: 10px;">Recent Price Reversals</h4>' +
-        reversals.slice(-5).map(reversal => // Show last 5 reversals
-            `<div class="reversal-item reversal-${reversal.direction.toLowerCase()}">
-                <span>${reversal.time} - ${reversal.direction}</span>
-                <span>${formatNumber(reversal.price)}</span>
-            </div>`
-        ).join('');
-}
-
-// Update signal display
-function updateSignalDisplay(signals) {
-    const signalDisplay = document.getElementById('signalDisplay');
-    const signalDirection = document.getElementById('signalDirection');
-    const signalStrength = document.getElementById('signalStrength');
-    const signalConfidence = document.getElementById('signalConfidence');
-
-    if (signalDirection) signalDirection.textContent = signals.direction || 'NEUTRAL';
-    if (signalStrength) signalStrength.textContent = signals.signal_strength?.toFixed(1) || '0.0';
-    if (signalConfidence) signalConfidence.textContent = Math.round(signals.confidence || 0);
-
-    // Update signal display styling
-    if (signalDisplay) {
-        signalDisplay.className = 'signal-display';
-
-        if (signals.direction === 'Bullish') {
-            signalDisplay.classList.add('signal-bullish');
-        } else if (signals.direction === 'Bearish') {
-            signalDisplay.classList.add('signal-bearish');
+        if (Math.abs(value) >= 1000000) {
+            return sign + (value / 1000000).toFixed(1) + 'M';
+        } else if (Math.abs(value) >= 1000) {
+            return sign + (value / 1000).toFixed(1) + 'K';
         } else {
-            signalDisplay.classList.add('signal-neutral');
+            return sign + value.toFixed(0);
         }
     }
-}
 
-// Update charts
-function updateCharts(data) {
+    // Update support and resistance levels
+    function updateSupportResistanceLevels(gammaData) {
+        const supportContainer = document.getElementById('supportLevels');
+        const resistanceContainer = document.getElementById('resistanceLevels');
+
+        if (supportContainer) {
+            const supportLevels = gammaData.support_levels || [];
+            supportContainer.innerHTML = supportLevels.length > 0 ?
+                supportLevels.map(level => `<div class="level-item support-level">${formatNumber(level)}</div>`).join('') :
+                '<div style="color: #999;">No support levels</div>';
+        }
+
+        if (resistanceContainer) {
+            const resistanceLevels = gammaData.resistance_levels || [];
+            resistanceContainer.innerHTML = resistanceLevels.length > 0 ?
+                resistanceLevels.map(level => `<div class="level-item resistance-level">${formatNumber(level)}</div>`).join('') :
+                '<div style="color: #999;">No resistance levels</div>';
+        }
+    }
+
+    // Update breakdown signals
+    function updateBreakdownSignals(signals) {
+        const container = document.getElementById('breakdownSignals');
+        if (!container) return;
+
+        if (signals.length === 0) {
+            container.innerHTML = '<div style="color: #00ff88; text-align: center;">No Breakdown Signals</div>';
+            return;
+        }
+
+        container.innerHTML = '<h4 style="color: #ff4444; margin-bottom: 10px;">⚠️ Breakdown Signals</h4>' +
+            signals.slice(-5).map(signal => // Show last 5 signals
+                `<div class="breakdown-item">
+                    <span class="breakdown-time">${signal.time}</span>
+                    <div style="margin-top: 4px; font-size: 0.9em;">${signal.signal}</div>
+                </div>`
+            ).join('');
+    }
+
+    // Update price reversals
+    function updatePriceReversals(reversals) {
+        const container = document.getElementById('priceReversals');
+        if (!container) return;
+
+        if (reversals.length === 0) {
+            container.innerHTML = '<h4 style="margin-bottom: 10px;">No Recent Reversals</h4>';
+            return;
+        }
+
+        container.innerHTML = '<h4 style="margin-bottom: 10px;">Recent Price Reversals</h4>' +
+            reversals.slice(-5).map(reversal => // Show last 5 reversals
+                `<div class="reversal-item reversal-${reversal.direction.toLowerCase()}">
+                    <span>${reversal.time} - ${reversal.direction}</span>
+                    <span>${formatNumber(reversal.price)}</span>
+                </div>`
+            ).join('');
+    }
+
+    // Update signal display
+    function updateSignalDisplay(signals) {
+        const signalDisplay = document.getElementById('signalDisplay');
+        const signalDirection = document.getElementById('signalDirection');
+        const signalStrength = document.getElementById('signalStrength');
+        const signalConfidence = document.getElementById('signalConfidence');
+
+        if (signalDirection) signalDirection.textContent = signals.direction || 'NEUTRAL';
+        if (signalStrength) signalStrength.textContent = signals.signal_strength?.toFixed(1) || '0.0';
+        if (signalConfidence) signalConfidence.textContent = Math.round(signals.confidence || 0);
+
+        // Update signal display styling
+        if (signalDisplay) {
+            signalDisplay.className = 'signal-display';
+
+            if (signals.direction === 'Bullish') {
+                signalDisplay.classList.add('signal-bullish');
+            } else if (signals.direction === 'Bearish') {
+                signalDisplay.classList.add('signal-bearish');
+            } else {
+                signalDisplay.classList.add('signal-neutral');
+            }
+        }
+    }
+
+    // Enhanced update charts function with new S/R Ratio and Spot Price charts
+    function updateCharts(data) {
     const timeLabel = new Date().toLocaleTimeString();
 
-    // Update futures chart
+    // Update enhanced futures chart with both datasets
     if (futuresChart && data.futures_data) {
         futuresChart.data.labels.push(timeLabel);
+
+        // Update weighted money flow (primary dataset)
         futuresChart.data.datasets[0].data.push(data.futures_data.weighted_money_flow || 0);
+
+        // Update cumulative money flow (secondary dataset)
+        futuresChart.data.datasets[1].data.push(data.futures_data.cumulative_weighted_money_flow || 0);
 
         // Keep only last 20 data points
         if (futuresChart.data.labels.length > 20) {
             futuresChart.data.labels.shift();
             futuresChart.data.datasets[0].data.shift();
+            futuresChart.data.datasets[1].data.shift();
         }
 
         futuresChart.update('none');
     }
 
-    // Update options chart
-    if (optionsChart && data.options_data) {
-        optionsChart.data.labels.push(timeLabel);
-        optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
+    // Update options chart (unchanged)
 
-        // Keep only last 20 data points
-        if (optionsChart.data.labels.length > 20) {
-            optionsChart.data.labels.shift();
-            optionsChart.data.datasets[0].data.shift();
-        }
+
+    if (optionsChart && data.options_data) {
+    optionsChart.data.labels.push(timeLabel);
+
+    // Update both datasets
+    optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
+    optionsChart.data.datasets[1].data.push(data.options_data.total_flow || 0);
+
+    // Keep only last 20 data points
+    if (optionsChart.data.labels.length > 20) {
+        optionsChart.data.labels.shift();
+        optionsChart.data.datasets[0].data.shift();
+        optionsChart.data.datasets[1].data.shift();
+    }
 
         optionsChart.update('none');
     }
 
-    // Update combined chart
+
+    // Update combined chart (unchanged)
     if (combinedChart && data.signals) {
         combinedChart.data.labels.push(timeLabel);
         combinedChart.data.datasets[0].data.push(data.signals.combined_signal || 0);
@@ -1011,36 +1055,65 @@ function updateCharts(data) {
 
         combinedChart.update('none');
     }
-}
 
-// Update connection status
-function updateConnectionStatus(status, message) {
-    const indicator = document.getElementById('connectionStatus');
-    const text = document.getElementById('connectionText');
+    // Update S/R Ratio chart (unchanged)
+    if (srRatioChart && data.gamma_data) {
+        srRatioChart.data.labels.push(timeLabel);
+        srRatioChart.data.datasets[0].data.push(data.gamma_data.sr_ratio || 0);
 
-    if (indicator) {
-        indicator.className = `status-indicator ${status}`;
+        // Keep only last 15 data points for smaller chart
+        if (srRatioChart.data.labels.length > 15) {
+            srRatioChart.data.labels.shift();
+            srRatioChart.data.datasets[0].data.shift();
+        }
+
+        srRatioChart.update('none');
     }
 
-    if (text) {
-        text.textContent = message;
+    // Update Spot Price chart (unchanged)
+    if (spotPriceChart && (data.spot_data || data.gamma_data)) {
+        spotPriceChart.data.labels.push(timeLabel);
+        const spotPrice = data.spot_data?.spot_price || data.gamma_data?.spot_price || 0;
+        spotPriceChart.data.datasets[0].data.push(spotPrice);
+
+        // Keep only last 15 data points for smaller chart
+        if (spotPriceChart.data.labels.length > 15) {
+            spotPriceChart.data.labels.shift();
+            spotPriceChart.data.datasets[0].data.shift();
+        }
+
+        spotPriceChart.update('none');
     }
 }
 
-// Update timestamp
-function updateTimestamp() {
-    const timestampElement = document.getElementById('lastUpdate');
-    if (timestampElement) {
-        timestampElement.textContent = new Date().toLocaleTimeString();
+
+    // Update connection status
+    function updateConnectionStatus(status, message) {
+        const indicator = document.getElementById('connectionStatus');
+        const text = document.getElementById('connectionText');
+
+        if (indicator) {
+            indicator.className = `status-indicator ${status}`;
+        }
+
+        if (text) {
+            text.textContent = message;
+        }
     }
-}
 
-// Initialize WebSocket (placeholder for future enhancement)
-function initializeWebSocket() {
-    // WebSocket implementation would go here
-    console.log('WebSocket initialization placeholder');
-}
+    // Update timestamp
+    function updateTimestamp() {
+        const timestampElement = document.getElementById('lastUpdate');
+        if (timestampElement) {
+            timestampElement.textContent = new Date().toLocaleTimeString();
+        }
+    }
 
+    // Initialize WebSocket (placeholder for future enhancement)
+    function initializeWebSocket() {
+        // WebSocket implementation would go here
+        console.log('WebSocket initialization placeholder');
+    }
 
     // Update price reversals with historical context
     function updatePriceReversalsWithHistory() {
@@ -1093,40 +1166,57 @@ function initializeWebSocket() {
 
     // Restore charts from historical data
     function restoreChartsFromHistoricalData() {
-        if (historicalData.length === 0) return;
+    if (historicalData.length === 0) return;
 
-        // Restore last 20 data points to charts
-        const dataToRestore = historicalData.slice(-20);
+    // Restore last 20 data points to charts
+    const dataToRestore = historicalData.slice(-20);
 
-        for (const data of dataToRestore) {
-            const timeLabel = new Date(data.timestamp).toLocaleTimeString();
+    for (const data of dataToRestore) {
+        const timeLabel = new Date(data.timestamp).toLocaleTimeString();
 
-            // Restore futures chart
-            if (futuresChart && data.futures_data) {
-                futuresChart.data.labels.push(timeLabel);
-                futuresChart.data.datasets[0].data.push(data.futures_data.weighted_money_flow || 0);
-            }
-
-            // Restore options chart
-            if (optionsChart && data.options_data) {
-                optionsChart.data.labels.push(timeLabel);
-                optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
-            }
-
-            // Restore combined chart
-            if (combinedChart && data.signals) {
-                combinedChart.data.labels.push(timeLabel);
-                combinedChart.data.datasets[0].data.push(data.signals.combined_signal || 0);
-            }
+        // Restore enhanced futures chart with both datasets
+        if (futuresChart && data.futures_data) {
+            futuresChart.data.labels.push(timeLabel);
+            futuresChart.data.datasets[0].data.push(data.futures_data.weighted_money_flow || 0);
+            futuresChart.data.datasets[1].data.push(data.futures_data.cumulative_weighted_money_flow || 0);
         }
 
-        // Update charts
-        if (futuresChart) futuresChart.update('none');
-        if (optionsChart) optionsChart.update('none');
-        if (combinedChart) combinedChart.update('none');
+        // Restore options chart
+        if (optionsChart && data.options_data) {
+            optionsChart.data.labels.push(timeLabel);
+            optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
+            optionsChart.data.datasets[1].data.push(data.options_data.total_flow || 0);
+        }
 
-        console.log(`📈 Restored ${dataToRestore.length} data points to charts`);
+        // Restore combined chart
+        if (combinedChart && data.signals) {
+            combinedChart.data.labels.push(timeLabel);
+            combinedChart.data.datasets[0].data.push(data.signals.combined_signal || 0);
+        }
+
+        // Restore S/R Ratio chart
+        if (srRatioChart && data.gamma_data) {
+            srRatioChart.data.labels.push(timeLabel);
+            srRatioChart.data.datasets[0].data.push(data.gamma_data.sr_ratio || 0);
+        }
+
+        // Restore Spot Price chart
+        if (spotPriceChart && (data.spot_data || data.gamma_data)) {
+            spotPriceChart.data.labels.push(timeLabel);
+            const spotPrice = data.spot_data?.spot_price || data.gamma_data?.spot_price || 0;
+            spotPriceChart.data.datasets[0].data.push(spotPrice);
+        }
     }
+
+    // Update all charts
+    if (futuresChart) futuresChart.update('none');
+    if (optionsChart) optionsChart.update('none');
+    if (combinedChart) combinedChart.update('none');
+    if (srRatioChart) srRatioChart.update('none');
+    if (spotPriceChart) spotPriceChart.update('none');
+
+    console.log(`📈 Restored ${dataToRestore.length} data points to all charts including dual-axis futures chart`);
+}
 
     // Clear all persisted data (useful for debugging)
     function clearPersistedData() {
@@ -1142,13 +1232,10 @@ function initializeWebSocket() {
         console.log('🧹 All persisted data cleared');
     }
 
-    // Enhanced fetch data function (replace the existing one)
+    // Enhanced fetch data function
     async function fetchData() {
         await fetchEnhancedData();
     }
-
-    // KEEP ALL YOUR EXISTING FUNCTIONS (setupEventListeners, toggleAutoRefresh, startAutoRefresh, initializeCharts, etc.)
-    // JUST ADD THE ENHANCED FUNCTIONS ABOVE
 
     // Setup event listeners
     function setupEventListeners() {
@@ -1175,96 +1262,345 @@ function initializeWebSocket() {
         refreshInterval = setInterval(fetchData, 30000); // 30 seconds
     }
 
-    // Initialize charts
+    // Enhanced initialize charts with S/R Ratio and Spot Price charts
     function initializeCharts() {
-        const chartOptions = {
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                    color: '#cccccc'
+                }
+            },
+            x: {
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                    color: '#cccccc'
+                }
+            }
+        }
+    };
+
+    // Compact chart options for smaller charts
+    const compactChartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                    color: '#cccccc',
+                    font: {
+                        size: 10
+                    }
+                }
+            },
+            x: {
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                    color: '#cccccc',
+                    font: {
+                        size: 9
+                    },
+                    maxTicksLimit: 5
+                }
+            }
+        }
+    };
+
+    // Enhanced Futures Chart with Dual Axis
+    futuresChart = new Chart(document.getElementById('futuresChart'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Weighted Money Flow',
+                    data: [],
+                    borderColor: '#00d4ff',
+                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                    tension: 0.4,
+                    borderWidth: 2,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Cumulative Flow',
+                    data: [],
+                    borderColor: '#ff6b6b',
+                    backgroundColor: 'rgba(255, 107, 107, 0.05)',
+                    tension: 0.4,
+                    borderWidth: 3,
+                    borderDash: [5, 5],
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
             plugins: {
                 legend: {
-                    display: false
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        color: '#cccccc',
+                        font: {
+                            size: 11
+                        },
+                        usePointStyle: true,
+                        pointStyle: 'line'
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label;
+                        },
+                        label: function(context) {
+                            const label = context.dataset.label;
+                            const value = formatNumber(context.parsed.y);
+                            return `${label}: ${value}`;
+                        }
+                    }
                 }
             },
             scales: {
-                y: {
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                        color: '#cccccc'
-                    }
-                },
                 x: {
                     grid: {
                         color: 'rgba(255, 255, 255, 0.1)'
                     },
                     ticks: {
-                        color: '#cccccc'
+                        color: '#cccccc',
+                        maxTicksLimit: 8
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    grid: {
+                        color: 'rgba(0, 212, 255, 0.2)'
+                    },
+                    ticks: {
+                        color: '#00d4ff',
+                        callback: function(value) {
+                            return formatNumber(value);
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Weighted Money Flow',
+                        color: '#00d4ff',
+                        font: {
+                            size: 10
+                        }
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false,
+                        color: 'rgba(255, 107, 107, 0.2)'
+                    },
+                    ticks: {
+                        color: '#ff6b6b',
+                        callback: function(value) {
+                            return formatNumber(value);
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Cumulative Flow',
+                        color: '#ff6b6b',
+                        font: {
+                            size: 10
+                        }
                     }
                 }
             }
-        };
+        }
+    });
 
-        // Futures Chart
-        futuresChart = new Chart(document.getElementById('futuresChart'), {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Money Flow',
-                    data: [],
-                    borderColor: '#00d4ff',
-                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
-                    tension: 0.4
-                }]
+    // Options Chart (unchanged)
+    optionsChart = new Chart(document.getElementById('optionsChart'), {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [
+            {
+                label: 'Net Flow',
+                data: [],
+                borderColor: '#00ff88',
+                backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                tension: 0.4,
+                borderWidth: 3,
+                fill: false
             },
-            options: chartOptions
-        });
-
-        // Options Chart
-        optionsChart = new Chart(document.getElementById('optionsChart'), {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Net Flow',
-                    data: [],
-                    borderColor: '#00ff88',
-                    backgroundColor: 'rgba(0, 255, 136, 0.1)',
-                    tension: 0.4
-                }]
+            {
+                label: 'Total Flow',
+                data: [],
+                borderColor: '#00d4ff',
+                backgroundColor: 'rgba(0, 212, 255, 0.05)',
+                tension: 0.4,
+                borderWidth: 2,
+                borderDash: [5, 5],
+                fill: false
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+            mode: 'index',
+            intersect: false,
+        },
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top',
+                labels: {
+                    color: '#cccccc',
+                    font: {
+                        size: 10
+                    },
+                    usePointStyle: true
+                }
             },
-            options: chartOptions
-        });
-
-        // Combined Chart
-        combinedChart = new Chart(document.getElementById('combinedChart'), {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Combined Signal',
-                    data: [],
-                    borderColor: '#ffaa00',
-                    backgroundColor: 'rgba(255, 170, 0, 0.1)',
-                    tension: 0.4
-                }]
-            },
-            options: {
-                ...chartOptions,
-                scales: {
-                    ...chartOptions.scales,
-                    y: {
-                        ...chartOptions.scales.y,
-                        min: -1,
-                        max: 1
+            tooltip: {
+                callbacks: {
+                    title: function(context) {
+                        return context[0].label;
+                    },
+                    label: function(context) {
+                        const label = context.dataset.label;
+                        const value = formatNumber(context.parsed.y);
+                        return `${label}: ${value}`;
                     }
                 }
             }
-        });
+        },
+        scales: {
+            x: {
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                    color: '#cccccc'
+                }
+            },
+            y: {
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                    color: '#cccccc',
+                    callback: function(value) {
+                        return formatNumber(value);
+                    }
+                }
+            }
+        }
     }
+});
 
-    // KEEP ALL YOUR OTHER EXISTING FUNCTIONS (updateDashboard, updateSignalDisplay, etc.)
+    // Combined Chart (unchanged)
+    combinedChart = new Chart(document.getElementById('combinedChart'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Combined Signal',
+                data: [],
+                borderColor: '#ffaa00',
+                backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                tension: 0.4
+            }]
+        },
+        options: {
+            ...chartOptions,
+            scales: {
+                ...chartOptions.scales,
+                y: {
+                    ...chartOptions.scales.y,
+                    min: -1,
+                    max: 1
+                }
+            }
+        }
+    });
+
+    // S/R Ratio Chart (unchanged)
+    srRatioChart = new Chart(document.getElementById('srRatioChart'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'S/R Ratio',
+                data: [],
+                borderColor: '#ff6b6b',
+                backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                tension: 0.4,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            ...compactChartOptions,
+            scales: {
+                ...compactChartOptions.scales,
+                y: {
+                    ...compactChartOptions.scales.y,
+                    min: 0,
+                    max: 5
+                }
+            }
+        }
+    });
+
+    // Spot Price Chart (unchanged)
+    spotPriceChart = new Chart(document.getElementById('spotPriceChart'), {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Spot Price',
+                data: [],
+                borderColor: '#4ecdc4',
+                backgroundColor: 'rgba(78, 205, 196, 0.1)',
+                tension: 0.4,
+                borderWidth: 2
+            }]
+        },
+        options: compactChartOptions
+    });
+}
+
 
     // Add to window API for debugging
     window.dashboardAPI = {
@@ -1282,11 +1618,11 @@ function initializeWebSocket() {
         })
     };
 
-    console.log('🚀 Enhanced Nifty Dashboard with Persistence Initialized');
+    console.log('🚀 Enhanced Nifty Dashboard with S/R Ratio and Spot Price Charts Initialized');
     console.log('💾 Data persists across page refreshes');
+    console.log('📊 New charts: S/R Ratio and Spot Price trends');
     console.log('🧹 Clear data: dashboardAPI.clearPersistedData()');
 </script>
-
 
 </body>
 </html>

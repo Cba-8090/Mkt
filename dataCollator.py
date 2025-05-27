@@ -259,71 +259,7 @@ class NiftyDataIntegrator:
             logger.error(f"Error reading futures data: {e}")
             return {}
 
-    def read_options_data(self) -> Dict:
-        """Read options money flow data - FIXED to use current time"""
-        file_path = os.path.join(self.options_base_path, 'net_money_flow_data.csv')
-
-        try:
-            df = pd.read_csv(file_path)
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-
-            # Get current time
-            now = datetime.now()
-            current_date = now.date()
-            current_datetime = now.replace(second=0, microsecond=0)
-
-            # Filter for today's data only
-            today_data = df[df['timestamp'].dt.date == current_date].copy()
-
-            if today_data.empty:
-                logger.warning("No options data found for today")
-                return {}
-
-            # Get data <= current time with preference for non-zero net_flow
-            available_data = today_data[
-                (today_data['timestamp'] <= current_datetime) &
-                (today_data['net_flow'] != 0)
-                ]
-
-            # If no non-zero data, get latest available <= current time
-            if available_data.empty:
-                available_data = today_data[today_data['timestamp'] <= current_datetime]
-
-            # If still empty, get first row
-            if available_data.empty:
-                available_data = today_data.head(1)
-
-            if available_data.empty:
-                logger.warning("No available options data found")
-                return {}
-
-            # Get latest available row
-            latest = available_data.iloc[-1]
-
-            # Debug logging
-            logger.info(f"Options data from: {latest['timestamp']}")
-            logger.info(f"Net flow: {latest['net_flow']}")
-
-            return {
-                'net_flow': float(latest['net_flow']),
-                'total_flow': float(latest['total_flow']),
-                'bullish_flow': float(latest['bullish_flow']),
-                'bearish_flow': float(latest['bearish_flow']),
-                'sentiment': str(latest['sentiment']),
-                'call_buying': float(latest['call_buying']),
-                'put_writing': float(latest['put_writing']),
-                'call_short_covering': float(latest['call_short_covering']),
-                'put_unwinding': float(latest['put_unwinding']),
-                'put_buying': float(latest['put_buying']),
-                'call_writing': float(latest['call_writing']),
-                'put_short_covering': float(latest['put_short_covering']),
-                'call_unwinding': float(latest['call_unwinding']),
-                'timestamp': latest['timestamp']
-            }
-        except Exception as e:
-            logger.error(f"Error reading options data: {e}")
-            return {}
-
+     
     def read_spot_data(self) -> Dict:
         """Read spot price data from SQLite database - ENHANCED"""
         try:
@@ -376,7 +312,7 @@ class NiftyDataIntegrator:
             return {'spot_price': 0.0, 'price_change': 0.0, 'price_change_pct': 0.0}
 
     def read_options_data(self) -> Dict:
-        """Read options money flow data - FIXED to use current time instead of last row"""
+        """Read options money flow data - CORRECTED to handle real-time updates properly"""
         file_path = os.path.join(self.options_base_path, 'net_money_flow_data.csv')
 
         try:
@@ -401,40 +337,23 @@ class NiftyDataIntegrator:
 
             logger.info(f"Today's options data rows: {len(today_data)}")
 
-            # Method 1: Find data <= current time with meaningful values
-            # Look for non-trivial net_flow or total_flow values
-            available_data = today_data[
-                (today_data['timestamp'] <= current_datetime) &
-                (
-                        (today_data['net_flow'].abs() > 10) |  # Non-trivial net flow
-                        (today_data['total_flow'] > 50)  # Meaningful total flow
-                )
-                ]
+            # CORRECTED LOGIC: Get the most recent data that's <= current time
+            # This prioritizes recency over "meaningful" values to show real-time updates
 
-            # If no meaningful data, get latest available <= current time
-            if available_data.empty:
-                available_data = today_data[today_data['timestamp'] <= current_datetime]
-                logger.info("No meaningful options data found, using latest available")
+            # Step 1: Get all data <= current time
+            available_data = today_data[today_data['timestamp'] <= current_datetime]
 
-            # If still empty, get the most recent meaningful data from today
             if available_data.empty:
-                meaningful_data = today_data[
-                    (today_data['net_flow'].abs() > 10) |
-                    (today_data['total_flow'] > 50)
-                    ]
-                if not meaningful_data.empty:
-                    available_data = meaningful_data.tail(1)
-                    logger.info("Using most recent meaningful data from today")
-                else:
-                    # Last resort: use first row of today
-                    available_data = today_data.head(1)
-                    logger.warning("Using first row as fallback")
+                # If no data <= current time, get the most recent data from today
+                # This can happen if the data file has future timestamps
+                logger.info("No data <= current time, using most recent from today")
+                available_data = today_data.tail(1)
 
             if available_data.empty:
                 logger.warning("No available options data found")
                 return {}
 
-            # Get the latest available row
+            # Get the latest available row (most recent by timestamp)
             latest = available_data.iloc[-1]
 
             # Enhanced debug logging
@@ -445,6 +364,12 @@ class NiftyDataIntegrator:
             logger.info(f"   Bullish Flow: {latest['bullish_flow']}")
             logger.info(f"   Bearish Flow: {latest['bearish_flow']}")
             logger.info(f"   Sentiment: {latest['sentiment']}")
+
+            # Additional debug: Show some context data
+            if len(available_data) > 1:
+                logger.info(f"📊 Recent options data context:")
+                for _, row in available_data.tail(3).iterrows():
+                    logger.info(f"   {row['timestamp']}: Net={row['net_flow']:.2f}, Total={row['total_flow']:.2f}")
 
             return {
                 'net_flow': float(latest['net_flow']),
@@ -465,6 +390,29 @@ class NiftyDataIntegrator:
         except Exception as e:
             logger.error(f"Error reading options data: {e}")
             return {}
+
+    def enhance_options_chart_data(self):
+        """Method to test different chart data combinations"""
+
+        # Get current options data
+        options_data = self.read_options_data()
+
+        if options_data:
+            print(f"\n📊 CURRENT OPTIONS DATA FOR CHART:")
+            print(f"Net Flow: {options_data['net_flow']}")
+            print(f"Total Flow: {options_data['total_flow']}")
+            print(f"Bullish Flow: {options_data['bullish_flow']}")
+            print(f"Bearish Flow: {options_data['bearish_flow']}")
+
+            # Test if the issue is with the chart or data
+            print(f"\n🎯 CHART SHOULD SHOW:")
+            print(f"Primary line: Net Flow = {options_data['net_flow']}")
+            print(f"If chart is flat, the issue is with chart update logic")
+
+            return options_data
+
+        return None
+    
 
     def debug_options_data_selection(self):
         """Debug method to understand options data selection"""
