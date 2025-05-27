@@ -676,7 +676,7 @@
         </div>
     </div>
 
-<script>
+    <script>
         // Enhanced global variables for persistence
         let autoRefresh = true;
         let refreshInterval;
@@ -697,10 +697,30 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadPersistedData();
             initializeCharts();
+            enhanceChartTimeAxis();
             setupEventListeners();
             fetchEnhancedData();
             startAutoRefresh();
         });
+
+
+function getChartDebugInfo() {
+    return {
+        futuresDataPoints: futuresChart?.data?.labels?.length || 0,
+        optionsDataPoints: optionsChart?.data?.labels?.length || 0,
+        combinedDataPoints: combinedChart?.data?.labels?.length || 0,
+        lastUpdateTime: lastChartUpdateTime?.toLocaleString() || 'Never',
+        timeRange: {
+            first: futuresChart?.data?.labels?.[0] || 'N/A',
+            last: futuresChart?.data?.labels?.[futuresChart.data.labels.length - 1] || 'N/A'
+        }
+    };
+}
+
+
+// Add to window API
+window.dashboardAPI.getChartDebugInfo = getChartDebugInfo;
+
 
         // Load persisted data from localStorage
         function loadPersistedData() {
@@ -761,7 +781,8 @@
                 console.error('Error saving data to persistence:', error);
             }
         }
-    // Enhanced breakdown signals with scrollable container
+
+        // Enhanced breakdown signals with scrollable container
         function updateBreakdownSignalsWithHistory() {
             const container = document.getElementById('breakdownSignalsContainer');
             const countElement = document.getElementById('breakdownCount');
@@ -990,8 +1011,7 @@
             }
         }
 
-
-    // Fetch data from backend
+        // Fetch data from backend
         async function fetchDataFromBackend() {
             const response = await fetch('/api/unified-data');
             if (!response.ok) {
@@ -1171,148 +1191,274 @@
                 }
             }
         }
-    // Enhanced update charts function
+
+        // Enhanced update charts function
         function updateCharts(data) {
-            const timeLabel = new Date().toLocaleTimeString();
+    // Create proper time label for 5-minute intervals
+    const now = new Date();
+    const timeLabel = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
 
-            // Update enhanced futures chart with both datasets
-            if (futuresChart && data.futures_data) {
-                futuresChart.data.labels.push(timeLabel);
+    // Only update charts if this is a new 5-minute interval or first load
+    const shouldUpdateChart = checkIfNewDataPoint(now);
 
-                // Update weighted money flow (primary dataset)
-                futuresChart.data.datasets[0].data.push(data.futures_data.weighted_money_flow || 0);
+    if (!shouldUpdateChart && historicalData.length > 1) {
+        console.log('⏸️ Skipping chart update - same 5-minute interval');
+        return;
+    }
 
-                // Update cumulative money flow (secondary dataset)
-                futuresChart.data.datasets[1].data.push(data.futures_data.cumulative_weighted_money_flow || 0);
+    console.log(`📈 Updating charts with new data point at ${timeLabel}`);
 
-                // Keep only last 20 data points
-                if (futuresChart.data.labels.length > 20) {
-                    futuresChart.data.labels.shift();
-                    futuresChart.data.datasets[0].data.shift();
-                    futuresChart.data.datasets[1].data.shift();
-                }
+    // Update enhanced futures chart with both datasets
+    if (futuresChart && data.futures_data) {
+        futuresChart.data.labels.push(timeLabel);
 
-                futuresChart.update('none');
-            }
+        // Update weighted money flow (primary dataset)
+        futuresChart.data.datasets[0].data.push(data.futures_data.weighted_money_flow || 0);
 
-            // Update options chart
-            if (optionsChart && data.options_data) {
-                optionsChart.data.labels.push(timeLabel);
+        // Update cumulative money flow (secondary dataset)
+        futuresChart.data.datasets[1].data.push(data.futures_data.cumulative_weighted_money_flow || 0);
 
-                // Update all datasets
-                optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
-                optionsChart.data.datasets[1].data.push(data.options_data.total_flow || 0);
-                optionsChart.data.datasets[2].data.push(data.options_data.bullish_flow || 0);
-                optionsChart.data.datasets[3].data.push(data.options_data.bearish_flow || 0);
-
-                // Keep only last 20 data points
-                if (optionsChart.data.labels.length > 20) {
-                    optionsChart.data.labels.shift();
-                    optionsChart.data.datasets.forEach(dataset => dataset.data.shift());
-                }
-
-                optionsChart.update('none');
-            }
-
-            // Update combined chart
-            if (combinedChart && data.signals) {
-                combinedChart.data.labels.push(timeLabel);
-                combinedChart.data.datasets[0].data.push(data.signals.combined_signal || 0);
-
-                // Keep only last 20 data points
-                if (combinedChart.data.labels.length > 20) {
-                    combinedChart.data.labels.shift();
-                    combinedChart.data.datasets[0].data.shift();
-                }
-
-                combinedChart.update('none');
-            }
-
-            // Update S/R Ratio chart
-            if (srRatioChart && data.gamma_data) {
-                srRatioChart.data.labels.push(timeLabel);
-                srRatioChart.data.datasets[0].data.push(data.gamma_data.sr_ratio || 0);
-
-                // Keep only last 15 data points for smaller chart
-                if (srRatioChart.data.labels.length > 15) {
-                    srRatioChart.data.labels.shift();
-                    srRatioChart.data.datasets[0].data.shift();
-                }
-
-                srRatioChart.update('none');
-            }
-
-            // Update Spot Price chart
-            if (spotPriceChart && (data.spot_data || data.gamma_data)) {
-                spotPriceChart.data.labels.push(timeLabel);
-                const spotPrice = data.spot_data?.spot_price || data.gamma_data?.spot_price || 0;
-                spotPriceChart.data.datasets[0].data.push(spotPrice);
-
-                // Keep only last 15 data points for smaller chart
-                if (spotPriceChart.data.labels.length > 15) {
-                    spotPriceChart.data.labels.shift();
-                    spotPriceChart.data.datasets[0].data.shift();
-                }
-
-                spotPriceChart.update('none');
-            }
+        // Keep more data points for better trend visibility (60 points = 5 hours)
+        if (futuresChart.data.labels.length > 60) {
+            futuresChart.data.labels.shift();
+            futuresChart.data.datasets[0].data.shift();
+            futuresChart.data.datasets[1].data.shift();
         }
+
+        futuresChart.update('none');
+    }
+
+    // Update options chart with enhanced data retention
+    if (optionsChart && data.options_data) {
+        optionsChart.data.labels.push(timeLabel);
+
+        // Update all datasets
+        optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
+        optionsChart.data.datasets[1].data.push(data.options_data.total_flow || 0);
+        optionsChart.data.datasets[2].data.push(data.options_data.bullish_flow || 0);
+        optionsChart.data.datasets[3].data.push(data.options_data.bearish_flow || 0);
+
+        // Keep 60 data points (5 hours of 5-minute data)
+        if (optionsChart.data.labels.length > 60) {
+            optionsChart.data.labels.shift();
+            optionsChart.data.datasets.forEach(dataset => dataset.data.shift());
+        }
+
+        optionsChart.update('none');
+    }
+
+    // Update combined chart
+    if (combinedChart && data.signals) {
+        combinedChart.data.labels.push(timeLabel);
+        combinedChart.data.datasets[0].data.push(data.signals.combined_signal || 0);
+
+        // Keep 60 data points
+        if (combinedChart.data.labels.length > 60) {
+            combinedChart.data.labels.shift();
+            combinedChart.data.datasets[0].data.shift();
+        }
+
+        combinedChart.update('none');
+    }
+
+    // Update S/R Ratio chart with more history
+    if (srRatioChart && data.gamma_data) {
+        srRatioChart.data.labels.push(timeLabel);
+        srRatioChart.data.datasets[0].data.push(data.gamma_data.sr_ratio || 0);
+
+        // Keep 36 data points (3 hours) for smaller chart
+        if (srRatioChart.data.labels.length > 36) {
+            srRatioChart.data.labels.shift();
+            srRatioChart.data.datasets[0].data.shift();
+        }
+
+        srRatioChart.update('none');
+    }
+
+    // Update Spot Price chart with more history
+    if (spotPriceChart && (data.spot_data || data.gamma_data)) {
+        spotPriceChart.data.labels.push(timeLabel);
+        const spotPrice = data.spot_data?.spot_price || data.gamma_data?.spot_price || 0;
+        spotPriceChart.data.datasets[0].data.push(spotPrice);
+
+        // Keep 36 data points (3 hours) for smaller chart
+        if (spotPriceChart.data.labels.length > 36) {
+            spotPriceChart.data.labels.shift();
+            spotPriceChart.data.datasets[0].data.shift();
+        }
+
+        spotPriceChart.update('none');
+    }
+
+    // Store the last update time for interval checking
+    lastChartUpdateTime = now;
+}
+
+
+
+// Global variable to track last chart update
+let lastChartUpdateTime = null;
+
+
+function checkIfNewDataPoint(currentTime) {
+    if (!lastChartUpdateTime) {
+        return true; // First update
+    }
+
+    // Check if we've moved to a new 5-minute interval
+    const lastMinute = Math.floor(lastChartUpdateTime.getMinutes() / 5) * 5;
+    const currentMinute = Math.floor(currentTime.getMinutes() / 5) * 5;
+
+    // Also check hour change
+    const timeDiffMinutes = (currentTime - lastChartUpdateTime) / (1000 * 60);
+
+    return (lastChartUpdateTime.getHours() !== currentTime.getHours()) ||
+           (lastMinute !== currentMinute) ||
+           (timeDiffMinutes >= 5);
+}
+
+
+
 
         // Restore charts from historical data
         function restoreChartsFromHistoricalData() {
-            if (historicalData.length === 0) return;
+    if (historicalData.length === 0) return;
 
-            // Restore last 20 data points to charts
-            const dataToRestore = historicalData.slice(-20);
+    // Restore more data points for better trend visibility
+    const dataToRestore = historicalData.slice(-60); // Last 60 points (5 hours)
 
-            for (const data of dataToRestore) {
-                const timeLabel = new Date(data.timestamp).toLocaleTimeString();
+    // Clear existing chart data first
+    if (futuresChart) {
+        futuresChart.data.labels = [];
+        futuresChart.data.datasets.forEach(dataset => dataset.data = []);
+    }
+    if (optionsChart) {
+        optionsChart.data.labels = [];
+        optionsChart.data.datasets.forEach(dataset => dataset.data = []);
+    }
+    if (combinedChart) {
+        combinedChart.data.labels = [];
+        combinedChart.data.datasets.forEach(dataset => dataset.data = []);
+    }
+    if (srRatioChart) {
+        srRatioChart.data.labels = [];
+        srRatioChart.data.datasets.forEach(dataset => dataset.data = []);
+    }
+    if (spotPriceChart) {
+        spotPriceChart.data.labels = [];
+        spotPriceChart.data.datasets.forEach(dataset => dataset.data = []);
+    }
 
-                // Restore enhanced futures chart with both datasets
-                if (futuresChart && data.futures_data) {
-                    futuresChart.data.labels.push(timeLabel);
-                    futuresChart.data.datasets[0].data.push(data.futures_data.weighted_money_flow || 0);
-                    futuresChart.data.datasets[1].data.push(data.futures_data.cumulative_weighted_money_flow || 0);
-                }
+    // Restore data with proper time formatting
+    for (const data of dataToRestore) {
+        const timestamp = new Date(data.timestamp);
+        const timeLabel = timestamp.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
 
-                // Restore options chart
-                if (optionsChart && data.options_data) {
-                    optionsChart.data.labels.push(timeLabel);
-                    optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
-                    optionsChart.data.datasets[1].data.push(data.options_data.total_flow || 0);
-                    optionsChart.data.datasets[2].data.push(data.options_data.bullish_flow || 0);
-                    optionsChart.data.datasets[3].data.push(data.options_data.bearish_flow || 0);
-                }
+        // Restore enhanced futures chart with both datasets
+        if (futuresChart && data.futures_data) {
+            futuresChart.data.labels.push(timeLabel);
+            futuresChart.data.datasets[0].data.push(data.futures_data.weighted_money_flow || 0);
+            futuresChart.data.datasets[1].data.push(data.futures_data.cumulative_weighted_money_flow || 0);
+        }
 
-                // Restore combined chart
-                if (combinedChart && data.signals) {
-                    combinedChart.data.labels.push(timeLabel);
-                    combinedChart.data.datasets[0].data.push(data.signals.combined_signal || 0);
-                }
+        // Restore options chart
+        if (optionsChart && data.options_data) {
+            optionsChart.data.labels.push(timeLabel);
+            optionsChart.data.datasets[0].data.push(data.options_data.net_flow || 0);
+            optionsChart.data.datasets[1].data.push(data.options_data.total_flow || 0);
+            optionsChart.data.datasets[2].data.push(data.options_data.bullish_flow || 0);
+            optionsChart.data.datasets[3].data.push(data.options_data.bearish_flow || 0);
+        }
 
-                // Restore S/R Ratio chart
-                if (srRatioChart && data.gamma_data) {
-                    srRatioChart.data.labels.push(timeLabel);
-                    srRatioChart.data.datasets[0].data.push(data.gamma_data.sr_ratio || 0);
-                }
+        // Restore combined chart
+        if (combinedChart && data.signals) {
+            combinedChart.data.labels.push(timeLabel);
+            combinedChart.data.datasets[0].data.push(data.signals.combined_signal || 0);
+        }
 
-                // Restore Spot Price chart
-                if (spotPriceChart && (data.spot_data || data.gamma_data)) {
-                    spotPriceChart.data.labels.push(timeLabel);
-                    const spotPrice = data.spot_data?.spot_price || data.gamma_data?.spot_price || 0;
-                    spotPriceChart.data.datasets[0].data.push(spotPrice);
+        // Restore S/R Ratio chart (last 36 points only)
+        if (srRatioChart && data.gamma_data && dataToRestore.indexOf(data) >= dataToRestore.length - 36) {
+            srRatioChart.data.labels.push(timeLabel);
+            srRatioChart.data.datasets[0].data.push(data.gamma_data.sr_ratio || 0);
+        }
+
+        // Restore Spot Price chart (last 36 points only)
+        if (spotPriceChart && (data.spot_data || data.gamma_data) && dataToRestore.indexOf(data) >= dataToRestore.length - 36) {
+            spotPriceChart.data.labels.push(timeLabel);
+            const spotPrice = data.spot_data?.spot_price || data.gamma_data?.spot_price || 0;
+            spotPriceChart.data.datasets[0].data.push(spotPrice);
+        }
+    }
+
+    // Update all charts
+    if (futuresChart) futuresChart.update('none');
+    if (optionsChart) optionsChart.update('none');
+    if (combinedChart) combinedChart.update('none');
+    if (srRatioChart) srRatioChart.update('none');
+    if (spotPriceChart) spotPriceChart.update('none');
+
+    console.log(`📈 Restored ${dataToRestore.length} data points to charts with proper 5-minute intervals`);
+
+    // Set the last update time
+    if (dataToRestore.length > 0) {
+        lastChartUpdateTime = new Date(dataToRestore[dataToRestore.length - 1].timestamp);
+    }
+}
+
+
+
+function enhanceChartTimeAxis() {
+    const enhancedTimeOptions = {
+        scales: {
+            x: {
+                grid: {
+                    color: 'rgba(255, 255, 255, 0.1)'
+                },
+                ticks: {
+                    color: '#cccccc',
+                    maxTicksLimit: 12, // Show 12 time labels max
+                    callback: function(value, index, ticks) {
+                        // Show every 5th label to avoid crowding
+                        if (index % 5 === 0) {
+                            return this.getLabelForValue(value);
+                        }
+                        return '';
+                    }
+                },
+                title: {
+                    display: true,
+                    text: '5-Minute Intervals',
+                    color: '#999',
+                    font: {
+                        size: 10
+                    }
                 }
             }
-
-            // Update all charts
-            if (futuresChart) futuresChart.update('none');
-            if (optionsChart) optionsChart.update('none');
-            if (combinedChart) combinedChart.update('none');
-            if (srRatioChart) srRatioChart.update('none');
-            if (spotPriceChart) spotPriceChart.update('none');
-
-            console.log(`📈 Restored ${dataToRestore.length} data points to all charts`);
         }
+    };
+
+    // Apply enhanced time axis to all charts
+    if (futuresChart) {
+        Object.assign(futuresChart.options.scales.x, enhancedTimeOptions.scales.x);
+    }
+    if (optionsChart) {
+        Object.assign(optionsChart.options.scales.x, enhancedTimeOptions.scales.x);
+    }
+    if (combinedChart) {
+        Object.assign(combinedChart.options.scales.x, enhancedTimeOptions.scales.x);
+    }
+}
+
+
+
 
         // Clear all persisted data (useful for debugging)
         function clearPersistedData() {
@@ -1370,8 +1516,7 @@
             refreshInterval = setInterval(fetchData, 30000); // 30 seconds
         }
 
-
-    // Enhanced initialize charts
+        // Enhanced initialize charts
         function initializeCharts() {
             const chartOptions = {
                 responsive: true,
@@ -1460,6 +1605,129 @@
                             tension: 0.4,
                             borderWidth: 3,
                             borderDash: [5, 5],
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#cccccc',
+                                font: {
+                                    size: 11
+                                },
+                                usePointStyle: true,
+                                pointStyle: 'line'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: '#cccccc',
+                                maxTicksLimit: 8
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: {
+                                color: 'rgba(0, 212, 255, 0.2)'
+                            },
+                            ticks: {
+                                color: '#00d4ff'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Weighted Money Flow',
+                                color: '#00d4ff',
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false,
+                                color: 'rgba(255, 107, 107, 0.2)'
+                            },
+                            ticks: {
+                                color: '#ff6b6b'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Cumulative Flow',
+                                color: '#ff6b6b',
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Enhanced Options Chart with 4 datasets and dual axis
+            optionsChart = new Chart(document.getElementById('optionsChart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Cumulative Net Flow',
+                            data: [],
+                            borderColor: '#00ff88',
+                            backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                            tension: 0.4,
+                            borderWidth: 3,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Total Flow',
+                            data: [],
+                            borderColor: '#00d4ff',
+                            backgroundColor: 'rgba(0, 212, 255, 0.05)',
+                            tension: 0.4,
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            label: 'Bullish Flow',
+                            data: [],
+                            borderColor: '#32cd32',
+                            backgroundColor: 'rgba(50, 205, 50, 0.05)',
+                            tension: 0.4,
+                            borderWidth: 2,
+                            fill: false,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            label: 'Bearish Flow',
+                            data: [],
+                            borderColor: '#ff6b6b',
+                            backgroundColor: 'rgba(255, 107, 107, 0.05)',
+                            tension: 0.4,
+                            borderWidth: 2,
+                            fill: false,
                             yAxisID: 'y1'
                         }
                     ]
@@ -1648,126 +1916,3 @@
 
 </body>
 </html>
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top',
-                            labels: {
-                                color: '#cccccc',
-                                font: {
-                                    size: 11
-                                },
-                                usePointStyle: true,
-                                pointStyle: 'line'
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            ticks: {
-                                color: '#cccccc',
-                                maxTicksLimit: 8
-                            }
-                        },
-                        y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            grid: {
-                                color: 'rgba(0, 212, 255, 0.2)'
-                            },
-                            ticks: {
-                                color: '#00d4ff'
-                            },
-                            title: {
-                                display: true,
-                                text: 'Weighted Money Flow',
-                                color: '#00d4ff',
-                                font: {
-                                    size: 10
-                                }
-                            }
-                        },
-                        y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            grid: {
-                                drawOnChartArea: false,
-                                color: 'rgba(255, 107, 107, 0.2)'
-                            },
-                            ticks: {
-                                color: '#ff6b6b'
-                            },
-                            title: {
-                                display: true,
-                                text: 'Cumulative Flow',
-                                color: '#ff6b6b',
-                                font: {
-                                    size: 10
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Enhanced Options Chart with 4 datasets and dual axis
-            optionsChart = new Chart(document.getElementById('optionsChart'), {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'Cumulative Net Flow',
-                            data: [],
-                            borderColor: '#00ff88',
-                            backgroundColor: 'rgba(0, 255, 136, 0.1)',
-                            tension: 0.4,
-                            borderWidth: 3,
-                            fill: false,
-                            yAxisID: 'y'
-                        },
-                        {
-                            label: 'Total Flow',
-                            data: [],
-                            borderColor: '#00d4ff',
-                            backgroundColor: 'rgba(0, 212, 255, 0.05)',
-                            tension: 0.4,
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            fill: false,
-                            yAxisID: 'y1'
-                        },
-                        {
-                            label: 'Bullish Flow',
-                            data: [],
-                            borderColor: '#32cd32',
-                            backgroundColor: 'rgba(50, 205, 50, 0.05)',
-                            tension: 0.4,
-                            borderWidth: 2,
-                            fill: false,
-                            yAxisID: 'y1'
-                        },
-                        {
-                            label: 'Bearish Flow',
-                            data: [],
-                            borderColor: '#ff6b6b',
-                            backgroundColor: 'rgba(255, 107, 107, 0.05)',
-                            tension: 0.4,
-                            borderWidth: 2,
-                            fill: false,
-                            yAxisID: 'y1'
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
