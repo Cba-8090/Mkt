@@ -169,13 +169,16 @@ class NiftyDataIntegrator:
         except Exception as e:
             logger.error(f"Error finding gamma file: {e}")
             return None
-    
+
+    # Replace the breakdown signals parsing section in your dataCollator.py
+    # Around line 280-320 in the parse_gamma_html method
+
     def parse_gamma_html(self, html_content: str) -> Dict:
-        """Parse gamma analysis from HTML content"""
+        """Parse gamma analysis from HTML content - Clean enhanced version"""
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             text_content = soup.get_text()
-            
+
             gamma_data = {
                 'support_pressure': 0.0,
                 'resistance_pressure': 0.0,
@@ -190,7 +193,7 @@ class NiftyDataIntegrator:
                 'spot_change': 0.0,
                 'trend_direction': 'NEUTRAL'
             }
-            
+
             # Extract current spot price and change from the last report table
             tables = soup.find_all('table')
             if len(tables) >= 2:  # Last table has all reports
@@ -207,7 +210,7 @@ class NiftyDataIntegrator:
                             gamma_data['sr_ratio'] = float(cells[7].text.strip())
                         except (ValueError, IndexError):
                             pass
-            
+
             # Extract max pressure strike from comparison table
             if len(tables) >= 1:
                 comparison_table = tables[0]  # First table is the comparison
@@ -224,7 +227,7 @@ class NiftyDataIntegrator:
                             gamma_data['max_pressure_value'] = float(cells[2].text.strip())
                         except (ValueError, IndexError):
                             pass
-            
+
             # Extract spot price change from summary
             spot_change_match = re.search(r'decreased by ([\d.]+) points', text_content)
             if not spot_change_match:
@@ -233,15 +236,101 @@ class NiftyDataIntegrator:
                     gamma_data['spot_change'] = float(spot_change_match.group(1))
             else:
                 gamma_data['spot_change'] = -float(spot_change_match.group(1))
-            
+
             # Extract trend direction
             if 'DOWNWARD' in text_content:
                 gamma_data['trend_direction'] = 'BEARISH'
             elif 'UPWARD' in text_content:
                 gamma_data['trend_direction'] = 'BULLISH'
-            
-            # Extract price reversals
-            reversal_pattern = r'(\d{2}:\d{2}:\d{2}): (BEARISH|BULLISH) reversal at price ([\d.]+)'
+
+            # ENHANCED: Extract breakdown signals with proper cleaning
+            breakdown_signals = []
+
+            # Method 1: Strong Breakdown Signals
+            strong_matches = re.findall(
+                r'(\d{2}:\d{2}:\d{2}):\s*(BREAKDOWN CONFIRMATION[^0-9]*?)(?=\d{2}:\d{2}:\d{2}|Support Erosion|$)',
+                text_content, re.DOTALL
+            )
+            for time_str, signal_text in strong_matches:
+                clean_signal = re.sub(r'\s+', ' ', signal_text.strip())
+                if clean_signal:
+                    breakdown_signals.append({
+                        'time': time_str,
+                        'signal': clean_signal,
+                        'type': 'CONFIRMATION'
+                    })
+
+            # Method 2: Breakdown Signals
+            signal_matches = re.findall(
+                r'(\d{2}:\d{2}:\d{2}):\s*(BREAKDOWN SIGNAL[^0-9]*?)(?=\d{2}:\d{2}:\d{2}|Support Erosion|$)',
+                text_content, re.DOTALL
+            )
+            for time_str, signal_text in signal_matches:
+                clean_signal = re.sub(r'\s+', ' ', signal_text.strip())
+                if clean_signal:
+                    breakdown_signals.append({
+                        'time': time_str,
+                        'signal': clean_signal,
+                        'type': 'WARNING'
+                    })
+
+            # Method 3: Support Erosion Events (cleaned)
+            erosion_matches = re.findall(
+                r'(\d{2}:\d{2}:\d{2}):\s*Support pressure decreased by ([\d,]+)\s*\(([\d.]+)%\)',
+                text_content
+            )
+            for time_str, amount, percentage in erosion_matches:
+                # Only include significant erosions (>10%)
+                if float(percentage) > 10:
+                    breakdown_signals.append({
+                        'time': time_str,
+                        'signal': f'Support Erosion: {amount} ({percentage}%)',
+                        'type': 'EROSION'
+                    })
+
+            # Method 4: Critical BEARISH reversals only (cleaned)
+            reversal_matches = re.findall(
+                r'(\d{2}:\d{2}:\d{2}):\s*BEARISH reversal at price ([\d.]+)',
+                text_content
+            )
+            for time_str, price in reversal_matches:
+                breakdown_signals.append({
+                    'time': time_str,
+                    'signal': f'BEARISH reversal at price {price}',
+                    'type': 'REVERSAL'
+                })
+
+            # Method 5: Any other critical breakdown patterns
+            critical_matches = re.findall(
+                r'(\d{2}:\d{2}:\d{2}):\s*(CRITICAL[^0-9]*?)(?=\d{2}:\d{2}:\d{2}|$)',
+                text_content, re.DOTALL
+            )
+            for time_str, signal_text in critical_matches:
+                clean_signal = re.sub(r'\s+', ' ', signal_text.strip())
+                if clean_signal and len(clean_signal) > 10:  # Avoid incomplete signals
+                    breakdown_signals.append({
+                        'time': time_str,
+                        'signal': clean_signal,
+                        'type': 'CRITICAL'
+                    })
+
+            # Remove duplicates and incomplete signals
+            unique_signals = {}
+            for signal in breakdown_signals:
+                key = signal['time']
+                # Skip incomplete signals
+                if len(signal['signal']) < 10 or 'decreased by' in signal['signal'] and '(' not in signal['signal']:
+                    continue
+
+                # Keep the longest/most complete signal for each time
+                if key not in unique_signals or len(signal['signal']) > len(unique_signals[key]['signal']):
+                    unique_signals[key] = signal
+
+            # Sort by time and store
+            gamma_data['breakdown_signals'] = sorted(unique_signals.values(), key=lambda x: x['time'])
+
+            # Extract price reversals separately (for the price reversals section)
+            reversal_pattern = r'(\d{2}:\d{2}:\d{2}):\s*(BEARISH|BULLISH)\s*reversal at price ([\d.]+)'
             reversals = re.findall(reversal_pattern, text_content)
             for time_str, direction, price in reversals:
                 gamma_data['price_reversals'].append({
@@ -249,55 +338,30 @@ class NiftyDataIntegrator:
                     'direction': direction,
                     'price': float(price)
                 })
-            
-            # Extract breakdown signals
-            breakdown_patterns = [
-                r'(\d{2}:\d{2}:\d{2}):?\s*CRITICAL BREAKDOWN SIGNAL[^<\n]*',
-                r'(\d{2}:\d{2}:\d{2}):?\s*BREAKDOWN CONFIRMATION[^<\n]*',
-                r'(\d{2}:\d{2}:\d{2}):?\s*Support erosion[^<\n]*'
-            ]
-            
-            for pattern in breakdown_patterns:
-                matches = re.findall(pattern, text_content, re.IGNORECASE)
-                for match in matches:
-                    if isinstance(match, tuple):
-                        time_str = match[0]
-                    else:
-                        time_str = match
-                    
-                    # Find the full signal text
-                    signal_match = re.search(f'{time_str}[^<\n]*', text_content)
-                    if signal_match:
-                        gamma_data['breakdown_signals'].append({
-                            'time': time_str,
-                            'signal': signal_match.group(0).strip()
-                        })
-            
-            # Extract support and resistance levels from changes sections
+
+            # Extract support and resistance levels
             support_added_pattern = r'New support level\(s\) added: ([\d, ]+)'
             resistance_added_pattern = r'New resistance level\(s\) added: ([\d, ]+)'
-            support_removed_pattern = r'Support level\(s\) removed: ([\d, ]+)'
-            resistance_removed_pattern = r'Resistance level\(s\) removed: ([\d, ]+)'
-            
+
             support_added = re.findall(support_added_pattern, text_content)
             resistance_added = re.findall(resistance_added_pattern, text_content)
-            
+
             # Parse support levels
             for levels_str in support_added:
                 levels = [int(level.strip()) for level in levels_str.split(',') if level.strip().isdigit()]
                 gamma_data['support_levels'].extend(levels)
-            
+
             # Parse resistance levels
             for levels_str in resistance_added:
                 levels = [int(level.strip()) for level in levels_str.split(',') if level.strip().isdigit()]
                 gamma_data['resistance_levels'].extend(levels)
-            
+
             # Remove duplicates and sort
             gamma_data['support_levels'] = sorted(list(set(gamma_data['support_levels'])))
             gamma_data['resistance_levels'] = sorted(list(set(gamma_data['resistance_levels'])))
-            
+
             return gamma_data
-            
+
         except Exception as e:
             logger.error(f"Error parsing gamma HTML: {e}")
             return {

@@ -752,19 +752,49 @@
 
         // Update breakdown signals
         function updateBreakdownSignals(signals) {
-            const container = document.getElementById('breakdownSignals');
-            if (signals.length === 0) {
-                container.innerHTML = '<div style="color: #00ff88; text-align: center;">No Breakdown Signals</div>';
-                return;
+    const container = document.getElementById('breakdownSignals');
+    if (signals.length === 0) {
+        container.innerHTML = '<div style="color: #00ff88; text-align: center;">No Breakdown Signals</div>';
+        return;
+    }
+
+    container.innerHTML = '<h4 style="color: #ff4444; margin-bottom: 10px;">⚠️ Breakdown Signals</h4>' +
+        signals.map(signal => {
+            let typeColor = '#ff4444';
+            let typeIcon = '⚠️';
+
+            switch(signal.type) {
+                case 'CRITICAL':
+                    typeColor = '#ff0000';
+                    typeIcon = '🚨';
+                    break;
+                case 'CONFIRMATION':
+                    typeColor = '#ff6600';
+                    typeIcon = '✅';
+                    break;
+                case 'WARNING':
+                    typeColor = '#ffaa00';
+                    typeIcon = '⚠️';
+                    break;
+                case 'EROSION':
+                    typeColor = '#ff4444';
+                    typeIcon = '📉';
+                    break;
+                case 'REVERSAL':
+                    typeColor = '#ff8800';
+                    typeIcon = '🔄';
+                    break;
             }
 
-            container.innerHTML = '<h4 style="color: #ff4444; margin-bottom: 10px;">⚠️ Breakdown Signals</h4>' +
-                signals.map(signal => 
-                    `<div class="breakdown-item">
-                        <span class="breakdown-time">${signal.time}</span>: ${signal.signal}
-                    </div>`
-                ).join('');
-        }
+            return `<div class="breakdown-item" style="border-left-color: ${typeColor}; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="breakdown-time" style="color: #00d4ff; font-weight: bold;">${signal.time}</span>
+                    <span style="color: ${typeColor}; font-size: 1.1em;">${typeIcon}</span>
+                </div>
+                <div style="margin-top: 4px; font-size: 0.85em; line-height: 1.3;">${signal.signal}</div>
+            </div>`;
+        }).join('');
+    }
 
         // Update price reversals
         function updatePriceReversals(reversals) {

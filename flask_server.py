@@ -330,6 +330,153 @@ def test_integrator():
     return False
 
 
+@app.route('/api/enhanced-data')
+def get_enhanced_data():
+    """API endpoint to get enhanced data with historical context"""
+    try:
+        if INTEGRATOR_AVAILABLE:
+            try:
+                # Get enhanced data with historical context
+                data = integrator.get_enhanced_latest_data()
+                if not data:
+                    print("No enhanced data found, collecting new data...")
+                    integrator.collect_unified_data()
+                    data = integrator.get_enhanced_latest_data()
+
+                # Use the safer datetime conversion
+                data = safe_datetime_convert(data)
+
+                print(
+                    f"API: Serving enhanced data with {len(data.get('historical_breakdown_signals', []))} historical signals")
+                return jsonify(data)
+
+            except Exception as integrator_error:
+                print(f"⚠️ Enhanced integrator error: {integrator_error}")
+                print("🔄 Falling back to regular data")
+                return get_unified_data()  # Fallback to regular data
+        else:
+            return get_unified_data()  # Fallback to simulated data
+
+    except Exception as e:
+        print(f"Error getting enhanced data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/historical-breakdown-signals')
+def get_historical_breakdown_signals():
+    """API endpoint to get historical breakdown signals"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+
+        if INTEGRATOR_AVAILABLE:
+            try:
+                signals = integrator.get_historical_breakdown_signals(hours)
+                signals = safe_datetime_convert(signals)
+                return jsonify({
+                    'signals': signals,
+                    'total_count': len(signals),
+                    'hours': hours
+                })
+            except Exception as e:
+                print(f"Historical breakdown signals error: {e}")
+                return jsonify({'signals': [], 'total_count': 0, 'hours': hours})
+        else:
+            return jsonify({'signals': [], 'total_count': 0, 'hours': hours})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/historical-reversals')
+def get_historical_reversals():
+    """API endpoint to get historical price reversals"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+
+        if INTEGRATOR_AVAILABLE:
+            try:
+                reversals = integrator.get_historical_price_reversals(hours)
+                reversals = safe_datetime_convert(reversals)
+                return jsonify({
+                    'reversals': reversals,
+                    'total_count': len(reversals),
+                    'hours': hours
+                })
+            except Exception as e:
+                print(f"Historical reversals error: {e}")
+                return jsonify({'reversals': [], 'total_count': 0, 'hours': hours})
+        else:
+            return jsonify({'reversals': [], 'total_count': 0, 'hours': hours})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/enhanced-stats')
+def get_enhanced_stats():
+    """API endpoint to get enhanced statistics with historical context"""
+    try:
+        if INTEGRATOR_AVAILABLE:
+            try:
+                stats = integrator.get_summary_stats()
+                return jsonify(stats)
+            except Exception as e:
+                print(f"Enhanced stats error: {e}")
+                pass
+
+        # Simulated enhanced stats
+        stats = {
+            'total_data_points': random.randint(50, 200),
+            'avg_signal': random.uniform(-0.3, 0.3),
+            'avg_strength': random.uniform(3, 7),
+            'max_signal': random.uniform(0.8, 1.0),
+            'min_signal': random.uniform(-1.0, -0.8),
+            'bullish_count': random.randint(10, 50),
+            'bearish_count': random.randint(10, 50),
+            'neutral_count': random.randint(5, 30),
+            'total_breakdown_signals': random.randint(20, 100),
+            'breakdown_by_type': {
+                'CRITICAL': random.randint(1, 5),
+                'CONFIRMATION': random.randint(2, 8),
+                'WARNING': random.randint(3, 10),
+                'EROSION': random.randint(5, 15),
+                'REVERSAL': random.randint(10, 25)
+            },
+            'total_price_reversals': random.randint(30, 80)
+        }
+        return jsonify(stats)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Update the existing health check to include historical data info
+@app.route('/api/health')
+def health_check():
+    """Enhanced health check endpoint"""
+    health_data = {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "integrator_available": INTEGRATOR_AVAILABLE,
+        "mode": "real_data" if INTEGRATOR_AVAILABLE else "simulation"
+    }
+
+    if INTEGRATOR_AVAILABLE:
+        try:
+            health_data.update({
+                "data_collection_running": integrator.running if hasattr(integrator, 'running') else False,
+                "total_data_points": len(integrator.unified_data) if hasattr(integrator, 'unified_data') else 0,
+                "historical_breakdown_signals": len(integrator.historical_breakdown_signals) if hasattr(integrator,
+                                                                                                        'historical_breakdown_signals') else 0,
+                "historical_price_reversals": len(integrator.historical_price_reversals) if hasattr(integrator,
+                                                                                                    'historical_price_reversals') else 0
+            })
+        except Exception:
+            health_data["integrator_status"] = "error"
+
+    return jsonify(health_data)
+
+
 if __name__ == '__main__':
     print("🔍 Checking required files...")
     if not check_required_files():
