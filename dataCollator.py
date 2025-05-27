@@ -312,7 +312,7 @@ class NiftyDataIntegrator:
             return {'spot_price': 0.0, 'price_change': 0.0, 'price_change_pct': 0.0}
 
     def read_options_data(self) -> Dict:
-        """Read options money flow data - CORRECTED to handle real-time updates properly"""
+        """Read options money flow data - FIXED to show cumulative net_flow"""
         file_path = os.path.join(self.options_base_path, 'net_money_flow_data.csv')
 
         try:
@@ -337,15 +337,11 @@ class NiftyDataIntegrator:
 
             logger.info(f"Today's options data rows: {len(today_data)}")
 
-            # CORRECTED LOGIC: Get the most recent data that's <= current time
-            # This prioritizes recency over "meaningful" values to show real-time updates
-
-            # Step 1: Get all data <= current time
+            # Get all data <= current time for cumulative calculation
             available_data = today_data[today_data['timestamp'] <= current_datetime]
 
             if available_data.empty:
                 # If no data <= current time, get the most recent data from today
-                # This can happen if the data file has future timestamps
                 logger.info("No data <= current time, using most recent from today")
                 available_data = today_data.tail(1)
 
@@ -353,29 +349,30 @@ class NiftyDataIntegrator:
                 logger.warning("No available options data found")
                 return {}
 
-            # Get the latest available row (most recent by timestamp)
+            # Get the latest available row for individual values
             latest = available_data.iloc[-1]
+
+            # ✅ CALCULATE CUMULATIVE NET FLOW - This is the key change!
+            cumulative_net_flow = available_data['net_flow'].sum()
 
             # Enhanced debug logging
             logger.info(f"✅ Options data selected:")
             logger.info(f"   Timestamp: {latest['timestamp']}")
-            logger.info(f"   Net Flow: {latest['net_flow']}")
+            logger.info(f"   Individual Net Flow: {latest['net_flow']}")
+            logger.info(f"   🔢 CUMULATIVE Net Flow: {cumulative_net_flow}")  # NEW!
             logger.info(f"   Total Flow: {latest['total_flow']}")
             logger.info(f"   Bullish Flow: {latest['bullish_flow']}")
             logger.info(f"   Bearish Flow: {latest['bearish_flow']}")
             logger.info(f"   Sentiment: {latest['sentiment']}")
 
-            # Additional debug: Show some context data
-            if len(available_data) > 1:
-                logger.info(f"📊 Recent options data context:")
-                for _, row in available_data.tail(3).iterrows():
-                    logger.info(f"   {row['timestamp']}: Net={row['net_flow']:.2f}, Total={row['total_flow']:.2f}")
+            # Show cumulative calculation details
+            logger.info(f"📊 Cumulative calculation from {len(available_data)} data points")
 
             return {
-                'net_flow': float(latest['net_flow']),
-                'total_flow': float(latest['total_flow']),
-                'bullish_flow': float(latest['bullish_flow']),
-                'bearish_flow': float(latest['bearish_flow']),
+                'net_flow': float(cumulative_net_flow),  # 🔧 CHANGED: Now cumulative!
+                'total_flow': float(latest['total_flow']),  # ✅ Individual (correct)
+                'bullish_flow': float(latest['bullish_flow']),  # ✅ Individual (correct)
+                'bearish_flow': float(latest['bearish_flow']),  # ✅ Individual (correct)
                 'sentiment': str(latest['sentiment']),
                 'call_buying': float(latest['call_buying']),
                 'put_writing': float(latest['put_writing']),
@@ -385,7 +382,10 @@ class NiftyDataIntegrator:
                 'call_writing': float(latest['call_writing']),
                 'put_short_covering': float(latest['put_short_covering']),
                 'call_unwinding': float(latest['call_unwinding']),
-                'timestamp': latest['timestamp']
+                'timestamp': latest['timestamp'],
+                # 🆕 Additional fields for debugging
+                'individual_net_flow': float(latest['net_flow']),  # For reference
+                'data_points_in_cumulative': len(available_data)
             }
         except Exception as e:
             logger.error(f"Error reading options data: {e}")
