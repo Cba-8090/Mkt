@@ -21,7 +21,15 @@ class NiftyDataIntegrator:
         self.options_base_path = r"C:\Projects\apps\_nifty_optionanalyser\net_flow_reports"
         self.gamma_base_path = r"C:\Projects\apps\_nifty_optionanalyser\option_analysis_reports"
         self.db_path = r"C:\Projects\apps\_nifty_optionanalyser\OptionAnalyser.db"
-        
+
+        self.historical_breakdown_signals = deque(maxlen=1000)  # Keep last 1000 signals
+        self.historical_price_reversals = deque(maxlen=500)  # Keep last 500 reversals
+        self.persistent_data_file = "nifty_historical_data.pkl"
+
+        # Load existing historical data on startup
+        self.load_historical_data()
+
+
         # Weights for signal calculation
         self.futures_weight = 0.70
         self.options_weight = 0.30
@@ -85,7 +93,91 @@ class NiftyDataIntegrator:
                 'confidence': 0.0
             }
         }
-    
+
+    def get_enhanced_latest_data(self) -> Dict:
+        """Get latest data with enhanced historical context"""
+        latest = self.get_latest_data()
+        if not latest:
+            return {}
+
+        # Add historical breakdown signals from today
+        today = datetime.now().strftime('%Y-%m-%d')
+        today_breakdown_signals = [
+            signal for signal in self.historical_breakdown_signals
+            if signal.get('date') == today
+        ]
+
+        # Add recent price reversals
+        recent_reversals = [
+            reversal for reversal in self.historical_price_reversals
+            if reversal.get('date') == today
+        ]
+
+        # Enhance the latest data
+        enhanced_data = latest.copy()
+        enhanced_data['historical_breakdown_signals'] = today_breakdown_signals[-20:]  # Last 20 signals
+        enhanced_data['recent_price_reversals'] = recent_reversals[-10:]  # Last 10 reversals
+
+        return enhanced_data
+
+    def get_historical_breakdown_signals(self, hours: int = 24) -> List[Dict]:
+        """Get historical breakdown signals for specified hours"""
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+
+        return [
+            signal for signal in self.historical_breakdown_signals
+            if signal.get('timestamp', datetime.now()) >= cutoff_time
+        ]
+
+    def get_historical_price_reversals(self, hours: int = 24) -> List[Dict]:
+        """Get historical price reversals for specified hours"""
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+
+        return [
+            reversal for reversal in self.historical_price_reversals
+            if reversal.get('timestamp', datetime.now()) >= cutoff_time
+        ]
+
+    def save_historical_data(self):
+        """Save historical data to disk"""
+        try:
+            historical_data = {
+                'breakdown_signals': list(self.historical_breakdown_signals),
+                'price_reversals': list(self.historical_price_reversals),
+                'last_saved': datetime.now().isoformat()
+            }
+
+            with open(self.persistent_data_file, 'wb') as f:
+                pickle.dump(historical_data, f)
+
+            logger.info(
+                f"Historical data saved: {len(self.historical_breakdown_signals)} signals, {len(self.historical_price_reversals)} reversals")
+
+        except Exception as e:
+            logger.error(f"Error saving historical data: {e}")
+
+    def load_historical_data(self):
+        """Load historical data from disk"""
+        try:
+            if os.path.exists(self.persistent_data_file):
+                with open(self.persistent_data_file, 'rb') as f:
+                    historical_data = pickle.load(f)
+
+                # Load breakdown signals
+                if 'breakdown_signals' in historical_data:
+                    self.historical_breakdown_signals.extend(historical_data['breakdown_signals'])
+
+                # Load price reversals
+                if 'price_reversals' in historical_data:
+                    self.historical_price_reversals.extend(historical_data['price_reversals'])
+
+                logger.info(
+                    f"Historical data loaded: {len(self.historical_breakdown_signals)} signals, {len(self.historical_price_reversals)} reversals")
+
+        except Exception as e:
+            logger.error(f"Error loading historical data: {e}")
+
+
     def get_latest_futures_file(self) -> Optional[str]:
         """Get the latest futures data file"""
         try:
@@ -477,20 +569,20 @@ class NiftyDataIntegrator:
                 'direction': 'Neutral',
                 'confidence': 0.0
             }
-    
+
     def collect_unified_data(self) -> Dict:
-        """Collect data from all sources and create unified structure"""
+        """Enhanced data collection with historical storage"""
         logger.info("Collecting data from all sources...")
-        
+
         # Read data from all sources
         futures_data = self.read_futures_data()
         options_data = self.read_options_data()
         gamma_data = self.read_gamma_data()
         spot_data = self.read_spot_data()
-        
+
         # Calculate combined signals
         signals = self.calculate_combined_signal(futures_data, options_data)
-        
+
         # Create unified data structure
         unified_data = {
             'timestamp': datetime.now(),
@@ -500,19 +592,50 @@ class NiftyDataIntegrator:
             'spot_data': spot_data,
             'signals': signals
         }
-        
+
         # Store latest data
         self.latest_data = unified_data
-        
+
         # Add to historical data
         self.unified_data.append(unified_data)
-        
-        # Keep only last 24 hours of data (288 data points at 5-minute intervals)
+
+        # ENHANCED: Store breakdown signals with timestamps
+        if gamma_data.get('breakdown_signals'):
+            for signal in gamma_data['breakdown_signals']:
+                signal_with_full_timestamp = {
+                    'timestamp': datetime.now(),
+                    'date': datetime.now().strftime('%Y-%m-%d'),
+                    'time': signal['time'],
+                    'signal': signal['signal'],
+                    'type': signal.get('type', 'UNKNOWN'),
+                    'spot_price': gamma_data.get('spot_price', 0.0),
+                    'sr_ratio': gamma_data.get('sr_ratio', 0.0)
+                }
+                self.historical_breakdown_signals.append(signal_with_full_timestamp)
+
+        # ENHANCED: Store price reversals with timestamps
+        if gamma_data.get('price_reversals'):
+            for reversal in gamma_data['price_reversals']:
+                reversal_with_full_timestamp = {
+                    'timestamp': datetime.now(),
+                    'date': datetime.now().strftime('%Y-%m-%d'),
+                    'time': reversal['time'],
+                    'direction': reversal['direction'],
+                    'price': reversal['price']
+                }
+                self.historical_price_reversals.append(reversal_with_full_timestamp)
+
+        # Keep only last 24 hours of unified data (288 data points at 5-minute intervals)
         if len(self.unified_data) > 288:
             self.unified_data = self.unified_data[-288:]
-        
-        logger.info(f"Data collection complete. Signal: {signals['direction']} (Strength: {signals['signal_strength']:.1f})")
-        
+
+        # Periodically save historical data
+        if len(self.unified_data) % 12 == 0:  # Save every hour
+            self.save_historical_data()
+
+        logger.info(
+            f"Data collection complete. Signal: {signals['direction']} (Strength: {signals['signal_strength']:.1f})")
+
         return unified_data
     
     def get_latest_data(self) -> Dict:
@@ -568,16 +691,22 @@ class NiftyDataIntegrator:
         """Stop continuous data collection"""
         self.running = False
         logger.info("Stopped continuous data collection")
-    
+
     def get_summary_stats(self) -> Dict:
-        """Get summary statistics of collected data"""
+        """Enhanced summary statistics with historical data"""
         if not self.unified_data:
             return {}
-        
+
         try:
             signals = [data['signals']['combined_signal'] for data in self.unified_data]
             strengths = [data['signals']['signal_strength'] for data in self.unified_data]
-            
+
+            # Count breakdown signals by type
+            breakdown_by_type = {}
+            for signal in self.historical_breakdown_signals:
+                signal_type = signal.get('type', 'UNKNOWN')
+                breakdown_by_type[signal_type] = breakdown_by_type.get(signal_type, 0) + 1
+
             return {
                 'total_data_points': len(self.unified_data),
                 'avg_signal': sum(signals) / len(signals),
@@ -586,7 +715,10 @@ class NiftyDataIntegrator:
                 'min_signal': min(signals),
                 'bullish_count': len([s for s in self.unified_data if s['signals']['direction'] == 'Bullish']),
                 'bearish_count': len([s for s in self.unified_data if s['signals']['direction'] == 'Bearish']),
-                'neutral_count': len([s for s in self.unified_data if s['signals']['direction'] == 'Neutral'])
+                'neutral_count': len([s for s in self.unified_data if s['signals']['direction'] == 'Neutral']),
+                'total_breakdown_signals': len(self.historical_breakdown_signals),
+                'breakdown_by_type': breakdown_by_type,
+                'total_price_reversals': len(self.historical_price_reversals)
             }
         except Exception as e:
             logger.error(f"Error calculating summary stats: {e}")
