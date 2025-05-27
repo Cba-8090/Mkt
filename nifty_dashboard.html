@@ -1449,86 +1449,144 @@
 
     // Options Chart (unchanged)
     optionsChart = new Chart(document.getElementById('optionsChart'), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            {
-                label: 'Net Flow',
-                data: [],
-                borderColor: '#00ff88',
-                backgroundColor: 'rgba(0, 255, 136, 0.1)',
-                tension: 0.4,
-                borderWidth: 3,
-                fill: false
-            },
-            {
-                label: 'Total Flow',
-                data: [],
-                borderColor: '#00d4ff',
-                backgroundColor: 'rgba(0, 212, 255, 0.05)',
-                tension: 0.4,
-                borderWidth: 2,
-                borderDash: [5, 5],
-                fill: false
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-            mode: 'index',
-            intersect: false,
-        },
-        plugins: {
-            legend: {
-                display: true,
-                position: 'top',
-                labels: {
-                    color: '#cccccc',
-                    font: {
-                        size: 10
-                    },
-                    usePointStyle: true
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Cumulative Net Flow',
+                    data: [],
+                    borderColor: '#00ff88',  // Green for cumulative net flow
+                    backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                    tension: 0.4,
+                    borderWidth: 3,
+                    fill: false,
+                    yAxisID: 'y'  // Left axis for cumulative values
+                },
+                {
+                    label: 'Total Flow',
+                    data: [],
+                    borderColor: '#00d4ff',  // Blue for total flow
+                    backgroundColor: 'rgba(0, 212, 255, 0.05)',
+                    tension: 0.4,
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: false,
+                    yAxisID: 'y1'  // Right axis for individual values
+                },
+                {
+                    label: 'Bullish Flow',
+                    data: [],
+                    borderColor: '#32cd32',  // Lime green for bullish
+                    backgroundColor: 'rgba(50, 205, 50, 0.05)',
+                    tension: 0.4,
+                    borderWidth: 2,
+                    fill: false,
+                    yAxisID: 'y1'  // Right axis for individual values
+                },
+                {
+                    label: 'Bearish Flow',
+                    data: [],
+                    borderColor: '#ff6b6b',  // Red for bearish
+                    backgroundColor: 'rgba(255, 107, 107, 0.05)',
+                    tension: 0.4,
+                    borderWidth: 2,
+                    fill: false,
+                    yAxisID: 'y1'  // Right axis for individual values
                 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
             },
-            tooltip: {
-                callbacks: {
-                    title: function(context) {
-                        return context[0].label;
-                    },
-                    label: function(context) {
-                        const label = context.dataset.label;
-                        const value = formatNumber(context.parsed.y);
-                        return `${label}: ${value}`;
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        color: '#cccccc',
+                        font: {
+                            size: 9
+                        },
+                        usePointStyle: true,
+                        pointStyle: 'line'
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label;
+                        },
+                        label: function(context) {
+                            const label = context.dataset.label;
+                            const value = formatNumber(context.parsed.y);
+                            return `${label}: ${value}`;
+                        }
                     }
                 }
-            }
-        },
-        scales: {
-            x: {
-                grid: {
-                    color: 'rgba(255, 255, 255, 0.1)'
-                },
-                ticks: {
-                    color: '#cccccc'
-                }
             },
-            y: {
-                grid: {
-                    color: 'rgba(255, 255, 255, 0.1)'
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#cccccc',
+                        maxTicksLimit: 8
+                    }
                 },
-                ticks: {
-                    color: '#cccccc',
-                    callback: function(value) {
-                        return formatNumber(value);
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    grid: {
+                        color: 'rgba(0, 255, 136, 0.2)'
+                    },
+                    ticks: {
+                        color: '#00ff88',
+                        callback: function(value) {
+                            return formatNumber(value);
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Cumulative Net Flow',
+                        color: '#00ff88',
+                        font: {
+                            size: 9
+                        }
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false,
+                        color: 'rgba(0, 212, 255, 0.2)'
+                    },
+                    ticks: {
+                        color: '#00d4ff',
+                        callback: function(value) {
+                            return formatNumber(value);
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Individual Flows',
+                        color: '#00d4ff',
+                        font: {
+                            size: 9
+                        }
                     }
                 }
             }
         }
-    }
-});
+    });
 
     // Combined Chart (unchanged)
     combinedChart = new Chart(document.getElementById('combinedChart'), {
