@@ -128,14 +128,14 @@ class NiftyDataIntegrator:
     def read_options_data(self) -> Dict:
         """Read options money flow data"""
         file_path = os.path.join(self.options_base_path, 'net_money_flow_data.csv')
-        
+
         try:
             df = pd.read_csv(file_path)
             df['timestamp'] = pd.to_datetime(df['timestamp'])
-            
+
             # Get latest data
             latest = df.iloc[-1]
-            
+
             return {
                 'net_flow': float(latest['net_flow']),
                 'total_flow': float(latest['total_flow']),
@@ -155,7 +155,7 @@ class NiftyDataIntegrator:
         except Exception as e:
             logger.error(f"Error reading options data: {e}")
             return {}
-    
+        
     def get_latest_gamma_file(self) -> Optional[str]:
         """Get the latest gamma analysis HTML file"""
         try:
