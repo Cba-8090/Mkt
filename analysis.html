@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}Money Flow Analysis Results{% endblock %}
+
+{% block content %}
+<!-- Auto-refresh button -->
+<div class="row mb-3">
+    <div class="col-12">
+        <button id="refreshBtn" class="btn btn-outline-primary">
+            <i class="fas fa-sync-alt me-2"></i>Refresh Analysis
+        </button>
+        <span class="text-muted ms-3">Last updated: <span id="lastUpdate">{{ signals.timestamp }}</span></span>
+        
+        {% if signals.data_status %}
+        <span class="badge bg-info ms-3">{{ signals.data_status }}</span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Primary Signal Panel -->
+<div class="row">
+    <div class="col-12">
+        <div class="card signal-card mb-4">
+            <div class="card-header bg-{{ signals.action_color }} text-white">
+                <h3 class="mb-0">
+                    <i class="fas fa-bullseye me-2"></i>
+                    Primary Trading Signal
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h2 class="text-{{ signals.action_color }}">{{ signals.major_signal }}</h2>
+                        <p class="lead">{{ signals.action }} - {{ signals.expected_move }}</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="metric-value text-{{ signals.action_color }}">{{ signals.confidence }}%</div>
+                        <small class="text-muted">Confidence</small>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="metric-value">{{ signals.flow_m }}M</div>
+                            <small class="text-muted">Current Flow</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="metric-value">{{ signals.cumulative_m }}M</div>
+                            <small class="text-muted">Cumulative</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="metric-value">
+                                {% if signals.flow_direction == 'POSITIVE' %}
+                                    <i class="fas fa-arrow-up text-success"></i>
+                                {% elif signals.flow_direction == 'NEGATIVE' %}
+                                    <i class="fas fa-arrow-down text-danger"></i>
+                                {% else %}
+                                    <i class="fas fa-minus text-muted"></i>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">{{ signals.flow_direction }}</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="metric-value">{{ signals.lead_time }}</div>
+                            <small class="text-muted">Lead Time</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts - Only show if charts data exists -->
+{% if charts.0 and charts.1 %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar me-2"></i>Money Flow</h5>
+            </div>
+            <div class="card-body">
+                <div id="flowChart"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line me-2"></i>Cumulative Flow</h5>
+            </div>
+            <div class="card-body">
+                <div id="cumulativeChart"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">Charts Not Available</h4>
+                <p class="text-muted">Upload CSV data to view money flow charts</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Alerts and Quick Reference -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Active Alerts</h5>
+            </div>
+            <div class="card-body">
+                {% if signals.alerts %}
+                    {% for alert in signals.alerts %}
+                    <div class="alert alert-{{ alert.color }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>{{ alert.type }}:</strong> {{ alert.message }}
+                                <br><small>{{ alert.action }}</small>
+                            </div>
+                            <span class="badge bg-{{ alert.color }}">{{ alert.priority }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-muted text-center py-3">
+                        <i class="fas fa-info-circle me-2"></i>No active alerts
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-book me-2"></i>Quick Reference</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <h6 class="text-success"><i class="fas fa-arrow-up me-1"></i>Strong Buy Signals</h6>
+                        <small class="text-muted">
+                            • Flow >100M = Major rally (90% success)<br>
+                            • Cumulative 0→+200M = Early accumulation<br>
+                            • Opening hour positive flows
+                        </small>
+                    </div>
+                    <div class="col-12 mb-3">
+                        <h6 class="text-danger"><i class="fas fa-arrow-down me-1"></i>Strong Sell Signals</h6>
+                        <small class="text-muted">
+                            • Flow <-100M = Major decline (90% success)<br>
+                            • Cumulative <-500M = Trending fall<br>
+                            • Cumulative >600M = Peak warning
+                        </small>
+                    </div>
+                    <div class="col-12">
+                        <h6 class="text-warning"><i class="fas fa-minus me-1"></i>Neutral Signals</h6>
+                        <small class="text-muted">
+                            • Flow ±25-50M = Consolidation<br>
+                            • No significant flows = Low conviction<br>
+                            • Mid-session range trading
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-pie me-2"></i>Session Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-2">
+                        <div class="text-center">
+                            <div class="metric-value text-primary">{{ stats.net_flow }}M</div>
+                            <small class="text-muted">Net Flow</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-center">
+                            <div class="metric-value text-success">{{ stats.max_inflow }}M</div>
+                            <small class="text-muted">Max Inflow</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-center">
+                            <div class="metric-value text-danger">{{ stats.max_outflow }}M</div>
+                            <small class="text-muted">Max Outflow</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-center">
+                            <div class="metric-value text-info">{{ stats.avg_flow }}M</div>
+                            <small class="text-muted">Avg Flow</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-center">
+                            <div class="metric-value text-success">{{ stats.total_positive }}M</div>
+                            <small class="text-muted">Total Positive</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-center">
+                            <div class="metric-value text-danger">{{ stats.total_negative }}M</div>
+                            <small class="text-muted">Total Negative</small>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if stats.data_coverage %}
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="text-center">
+                            <span class="badge bg-info me-2">{{ stats.data_coverage }} Complete</span>
+                            {% if stats.session_progress %}
+                            <span class="badge bg-secondary">{{ stats.session_progress }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize charts only if data exists
+    {% if charts.0 and charts.1 %}
+    try {
+        const flowChart = {{ charts.0|safe }};
+        const cumulativeChart = {{ charts.1|safe }};
+        
+        Plotly.newPlot('flowChart', flowChart.data, flowChart.layout, {responsive: true});
+        Plotly.newPlot('cumulativeChart', cumulativeChart.data, cumulativeChart.layout, {responsive: true});
+    } catch (error) {
+        console.error('Error initializing charts:', error);
+    }
+    {% endif %}
+    
+    // Refresh functionality with proper error handling
+    document.getElementById('refreshBtn').addEventListener('click', function() {
+        const btn = this;
+        const originalText = btn.innerHTML;
+        
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Refreshing...';
+        btn.disabled = true;
+        
+        fetch('/api/refresh')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('lastUpdate').textContent = data.signals.timestamp;
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                if (data.redirect) {
+                    alert(data.message + ' - Redirecting to upload page...');
+                    setTimeout(() => window.location.href = data.redirect, 2000);
+                } else {
+                    alert('Error refreshing data: ' + data.message);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Refresh error:', error);
+            alert('Network error: Unable to refresh data');
+        })
+        .finally(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        });
+    });
+    
+    // Auto-refresh every 30 seconds (only if data is loaded)
+    {% if signals and signals.timestamp != 'No Data Available' %}
+    setInterval(function() {
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn && !refreshBtn.disabled) {
+            refreshBtn.click();
+        }
+    }, 30000);
+    {% endif %}
+});
+</script>
+{% endblock %}
