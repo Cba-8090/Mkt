@@ -865,6 +865,28 @@ def main():
 
     args = parser.parse_args()
 
+    # ADD THIS SECTION - Define source directory for CSV files
+    source_dir = r'C:\Projects\apps\_keystock_analyser\output'
+
+    # Fix CSV path if only filename provided
+    if not os.path.dirname(args.csv):
+        csv_full_path = os.path.join(source_dir, args.csv)
+        if os.path.exists(csv_full_path):
+            args.csv = csv_full_path
+            print(f"📂 Found CSV in source directory: {csv_full_path}")
+        else:
+            print(f"❌ CSV file not found: {args.csv}")
+            print(f"💡 Looking in: {source_dir}")
+            print(f"💡 Available CSV files:")
+            try:
+                csv_files = [f for f in os.listdir(source_dir) if f.endswith('.csv')]
+                for csv_file in csv_files:
+                    print(f"   - {csv_file}")
+            except:
+                print("   - Unable to list files")
+            return
+    # END OF ADDED SECTION
+
     # Define output directory
     output_dir = r'C:\Projects\apps\_keystock_analyser\output'
 
