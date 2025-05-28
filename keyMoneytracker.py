@@ -854,6 +854,7 @@ class HTMLGenerator:
             print(f"❌ Error writing HTML file: {e}")
             return False
 
+
 def main():
     """Main execution function"""
     parser = argparse.ArgumentParser(description='Money Flow Dashboard Generator')
@@ -864,10 +865,21 @@ def main():
 
     args = parser.parse_args()
 
+    # Define output directory
+    output_dir = r'C:\Projects\apps\_keystock_analyser\output'
+
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+
     # Generate output filename if not provided
     if not args.output:
         date_str = datetime.now().strftime('%Y%m%d')
-        args.output = f'keymoney_{date_str}.html'
+        filename = f'keymoney_{date_str}.html'
+        args.output = os.path.join(output_dir, filename)
+    else:
+        # If custom output provided, ensure it's in the output directory
+        if not os.path.dirname(args.output):
+            args.output = os.path.join(output_dir, args.output)
 
     print("🚀 Money Flow Dashboard Generator")
     print("=" * 50)
@@ -913,8 +925,8 @@ def main():
         print(f"\n✅ Single generation complete")
         print(f"💡 Use --continuous flag for live updates")
 
+
 if __name__ == "__main__":
     main()
-
 
 
