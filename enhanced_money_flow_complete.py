@@ -1158,33 +1158,20 @@ class EnhancedMoneyFlowAnalyzer:
             })
 
     def create_enhanced_charts_with_gamma(self):
-        """Create enhanced multi-source charts with 3-bar gamma-integrated Combined Analysis"""
+        """Create enhanced multi-source charts with SPLIT 3-bar gamma-integrated Combined Analysis"""
         if self.data_loader.futures_data is None:
-            return "", "", "", ""
+            return "", "", "", "", ""
 
-        print("📊 Creating Enhanced 3-Bar Combined Analysis with Gamma Integration...")
+        print("📊 Creating Enhanced Split Combined Analysis with Gamma Integration...")
 
         # Get live data
         futures_df = self.data_loader.futures_data.iloc[:self.live_data_end_index + 1]
 
-        # Chart 1: Enhanced Combined Analysis with 3-Bar System
-        combined_fig = make_subplots(
-            rows=2, cols=1,
-            subplot_titles=[
-                'Futures Money Flow (70% Weight) + Cumulative',
-                'Enhanced Combined Analysis - 3-Bar System with Gamma Integration'
-            ],
-            vertical_spacing=0.2,
-            row_heights=[0.45, 0.55],  # Give more space to enhanced analysis
-            specs=[
-                [{"secondary_y": True}],
-                [{"secondary_y": True}]
-            ]
-        )
+        # Chart 1: Original Futures Flow (keep existing)
+        futures_fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        # Top Panel: Original Futures Flow (keep existing)
         flow_colors = ['#4CAF50' if x > 0 else '#f44336' for x in futures_df['weighted_money_flow']]
-        combined_fig.add_trace(
+        futures_fig.add_trace(
             go.Bar(
                 x=futures_df['timestamp'],
                 y=futures_df['weighted_money_flow'] / 1_000_000,
@@ -1193,10 +1180,10 @@ class EnhancedMoneyFlowAnalyzer:
                 hovertemplate='<b>%{x}</b><br>Flow: %{y:.2f}M<extra></extra>',
                 opacity=0.7
             ),
-            row=1, col=1, secondary_y=False
+            secondary_y=False
         )
 
-        combined_fig.add_trace(
+        futures_fig.add_trace(
             go.Scatter(
                 x=futures_df['timestamp'],
                 y=futures_df['cumulative_weighted_money_flow'] / 1_000_000,
@@ -1206,83 +1193,12 @@ class EnhancedMoneyFlowAnalyzer:
                 hovertemplate='<b>%{x}</b><br>Cumulative: %{y:.2f}M<extra></extra>',
                 yaxis='y2'
             ),
-            row=1, col=1, secondary_y=True
+            secondary_y=True
         )
 
-        # Bottom Panel: Enhanced 3-Bar Combined Analysis
-        enhanced_data = self._calculate_enhanced_combined_analysis(futures_df)
-
-        # Create offset timestamps for 3-bar positioning
-        timestamps = enhanced_data['timestamps']
-        bar_width = 0.25
-        bar_offset = 0.3
-
-        # Bar 1: Futures Component (Blue)
-        combined_fig.add_trace(
-            go.Bar(
-                x=timestamps,
-                y=enhanced_data['futures_components'],
-                name='Futures Component (70%)',
-                marker=dict(color='#2196F3', opacity=0.8),
-                width=bar_width,
-                offset=-bar_offset,
-                hovertemplate='<b>Futures Component</b><br>%{x}<br>Value: %{y:.2f}M<br>Weight: 70%<extra></extra>',
-                legendgroup='components'
-            ),
-            row=2, col=1, secondary_y=False
-        )
-
-        # Bar 2: Options Component (Purple)
-        combined_fig.add_trace(
-            go.Bar(
-                x=timestamps,
-                y=enhanced_data['options_components'],
-                name='Options Component (30%)',
-                marker=dict(color='#9C27B0', opacity=0.8),
-                width=bar_width,
-                offset=0,
-                hovertemplate='<b>Options Component</b><br>%{x}<br>Value: %{y:.2f}M<br>Weight: 30%<extra></extra>',
-                legendgroup='components'
-            ),
-            row=2, col=1, secondary_y=False
-        )
-
-        # Bar 3: Gamma-Enhanced Combined (Orange)
-        combined_fig.add_trace(
-            go.Bar(
-                x=timestamps,
-                y=enhanced_data['gamma_enhanced'],
-                name='Gamma-Enhanced Combined',
-                marker=dict(color='#FF6B35', opacity=0.9),
-                width=bar_width,
-                offset=bar_offset,
-                hovertemplate='<b>Gamma-Enhanced Combined</b><br>%{x}<br>Value: %{y:.2f}M<br>Gamma Multiplier: %{customdata[0]:.2f}<br>Directional Bias: %{customdata[1]:+.1f}M<extra></extra>',
-                customdata=list(zip(enhanced_data['gamma_multipliers'], enhanced_data['directional_bias'])),
-                legendgroup='enhanced'
-            ),
-            row=2, col=1, secondary_y=False
-        )
-
-        # Cumulative Gamma-Enhanced Line (Cyan, Secondary Y-axis)
-        combined_fig.add_trace(
-            go.Scatter(
-                x=timestamps,
-                y=enhanced_data['cumulative_gamma'],
-                mode='lines+markers',
-                name='Cumulative Gamma-Enhanced',
-                line=dict(color='#00BCD4', width=4),
-                marker=dict(size=6, color='#00BCD4', line=dict(color='#ffffff', width=1)),
-                hovertemplate='<b>Cumulative Gamma-Enhanced</b><br>%{x}<br>Total: %{y:.2f}M<extra></extra>',
-                yaxis='y4',
-                legendgroup='cumulative'
-            ),
-            row=2, col=1, secondary_y=True
-        )
-
-        # Update layout with enhanced styling
-        combined_fig.update_layout(
+        futures_fig.update_layout(
             title={
-                'text': 'Enhanced Multi-Source Money Flow Analysis with Gamma Integration',
+                'text': 'Futures Money Flow (70% Weight) + Cumulative',
                 'x': 0.5,
                 'xanchor': 'center',
                 'font': {'size': 16}
@@ -1290,27 +1206,94 @@ class EnhancedMoneyFlowAnalyzer:
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#e6f1ff'),
-            showlegend=True,
-            height=750,  # Increased height for 3-bar system
-            margin=dict(l=80, r=80, t=100, b=60),
+            height=400,
+            margin=dict(l=80, r=80, t=80, b=60)
+        )
+
+        futures_fig.update_yaxes(title_text="Flow (Millions)", secondary_y=False)
+        futures_fig.update_yaxes(title_text="Cumulative (Millions)", secondary_y=True)
+        futures_fig.update_xaxes(title_text="Time")
+
+        # Chart 2: NEW - 3-Bar Component Analysis (NO cumulative line)
+        enhanced_data = self._calculate_enhanced_combined_analysis(futures_df)
+
+        components_fig = go.Figure()
+
+        # Create offset timestamps for 3-bar positioning
+        timestamps = enhanced_data['timestamps']
+        bar_width = 0.25
+
+        # Bar 1: Futures Component (Blue)
+        components_fig.add_trace(
+            go.Bar(
+                x=timestamps,
+                y=enhanced_data['futures_components'],
+                name='Futures Component (70%)',
+                marker=dict(color='#2196F3', opacity=0.8),
+                width=bar_width,
+                offset=-0.3,
+                hovertemplate='<b>Futures Component</b><br>%{x}<br>Value: %{y:.2f}M<br>Weight: 70%<extra></extra>'
+            )
+        )
+
+        # Bar 2: Options Component (Purple)
+        components_fig.add_trace(
+            go.Bar(
+                x=timestamps,
+                y=enhanced_data['options_components'],
+                name='Options Component (30%)',
+                marker=dict(color='#9C27B0', opacity=0.8),
+                width=bar_width,
+                offset=0,
+                hovertemplate='<b>Options Component</b><br>%{x}<br>Value: %{y:.2f}M<br>Weight: 30%<extra></extra>'
+            )
+        )
+
+        # Bar 3: Gamma-Enhanced Combined (Orange)
+        components_fig.add_trace(
+            go.Bar(
+                x=timestamps,
+                y=enhanced_data['gamma_enhanced'],
+                name='Gamma-Enhanced Combined',
+                marker=dict(color='#FF6B35', opacity=0.9),
+                width=bar_width,
+                offset=0.3,
+                hovertemplate='<b>Gamma-Enhanced Combined</b><br>%{x}<br>Value: %{y:.2f}M<br>Gamma Multiplier: %{customdata[0]:.2f}<br>Directional Bias: %{customdata[1]:+.1f}M<extra></extra>',
+                customdata=list(zip(enhanced_data['gamma_multipliers'], enhanced_data['directional_bias']))
+            )
+        )
+
+        components_fig.update_layout(
+            title={
+                'text': '3-Bar Component Analysis with Gamma Integration',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16}
+            },
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e6f1ff'),
+            height=450,
+            margin=dict(l=80, r=80, t=80, b=60),
+            barmode='group',
+            bargap=0.1,
+            bargroupgap=0.1,
+            yaxis_title="Component Flow (Millions)",
+            xaxis_title="Time",
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
                 y=1.02,
                 xanchor="center",
-                x=0.5,
-                bgcolor='rgba(0,0,0,0.1)',
-                bordercolor='rgba(255,255,255,0.2)',
-                borderwidth=1
+                x=0.5
             ),
-            # Add annotations for gamma effects
             annotations=[
                 dict(
                     x=0.5,
                     y=-0.15,
                     xref='paper',
                     yref='paper',
-                    text='🔵 Futures (70%) | 🟣 Options (30%) | 🟠 Gamma-Enhanced | 🔷 Cumulative Trend',
+                    text='🔵 Futures (70%) | 🟣 Options (30%) | 🟠 Gamma-Enhanced',
                     showarrow=False,
                     font=dict(size=12, color='#8892b0'),
                     xanchor='center'
@@ -1318,41 +1301,80 @@ class EnhancedMoneyFlowAnalyzer:
             ]
         )
 
-        # Update Y-axes with better labels
-        combined_fig.update_yaxes(
-            title_text="Flow (Millions)",
-            secondary_y=False,
-            row=1, col=1,
-            title_font_size=12,
-            tickfont_size=10
-        )
-        combined_fig.update_yaxes(
-            title_text="Cumulative (Millions)",
-            secondary_y=True,
-            row=1, col=1,
-            title_font_size=12,
-            tickfont_size=10
-        )
-        combined_fig.update_yaxes(
-            title_text="Component Flow (M)",
-            secondary_y=False,
-            row=2, col=1,
-            title_font_size=12,
-            tickfont_size=10
-        )
-        combined_fig.update_yaxes(
-            title_text="Cumulative Gamma (M)",
-            secondary_y=True,
-            row=2, col=1,
-            title_font_size=12,
-            tickfont_size=10
+        # Chart 3: NEW - Cumulative Gamma-Enhanced Analysis (SEPARATE)
+        cumulative_fig = go.Figure()
+
+        cumulative_fig.add_trace(
+            go.Scatter(
+                x=timestamps,
+                y=enhanced_data['cumulative_gamma'],
+                mode='lines+markers',
+                name='Cumulative Gamma-Enhanced',
+                line=dict(color='#00BCD4', width=4),
+                marker=dict(size=8, color='#00BCD4', line=dict(color='#ffffff', width=2)),
+                hovertemplate='<b>Cumulative Gamma-Enhanced</b><br>%{x}<br>Total: %{y:.2f}M<br>Change: %{customdata:+.2f}M<extra></extra>',
+                customdata=[enhanced_data['gamma_enhanced'][i] for i in range(len(enhanced_data['gamma_enhanced']))]
+            )
         )
 
-        combined_fig.update_xaxes(
-            title_text="Time",
-            row=2, col=1,
-            title_font_size=12,
-            tickfont_size=10
+        # Add zero line for reference
+        cumulative_fig.add_hline(
+            y=0,
+            line_dash="dash",
+            line_color="rgba(255,255,255,0.3)",
+            annotation_text="Zero Line",
+            annotation_position="bottom right"
+        )
+
+        # Add trend zones
+        max_cumulative = max(enhanced_data['cumulative_gamma'])
+        min_cumulative = min(enhanced_data['cumulative_gamma'])
+
+        if max_cumulative > 100:
+            cumulative_fig.add_hrect(
+                y0=100, y1=max_cumulative * 1.1,
+                fillcolor="rgba(76, 175, 80, 0.1)",
+                line_width=0,
+                annotation_text="Strong Bullish Zone",
+                annotation_position="top left"
+            )
+
+        if min_cumulative < -100:
+            cumulative_fig.add_hrect(
+                y0=min_cumulative * 1.1, y1=-100,
+                fillcolor="rgba(244, 67, 54, 0.1)",
+                line_width=0,
+                annotation_text="Strong Bearish Zone",
+                annotation_position="bottom left"
+            )
+
+        cumulative_fig.update_layout(
+            title={
+                'text': 'Cumulative Gamma-Enhanced Trend Analysis',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16}
+            },
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e6f1ff'),
+            height=400,
+            margin=dict(l=80, r=80, t=80, b=60),
+            yaxis_title="Cumulative Flow (Millions)",
+            xaxis_title="Time",
+            showlegend=True,
+            annotations=[
+                dict(
+                    x=0.5,
+                    y=-0.15,
+                    xref='paper',
+                    yref='paper',
+                    text='🔷 Running Total of Gamma-Enhanced Combined Flow | Trend Direction Indicator',
+                    showarrow=False,
+                    font=dict(size=12, color='#8892b0'),
+                    xanchor='center'
+                )
+            ]
         )
 
         # Create other charts (keep existing implementations)
@@ -1368,12 +1390,18 @@ class EnhancedMoneyFlowAnalyzer:
             'modeBarButtonsToRemove': ['pan2d', 'lasso2d']
         }
 
-        combined_html = pyo.plot(combined_fig, output_type='div', include_plotlyjs=False, config=config)
+        futures_html = pyo.plot(futures_fig, output_type='div', include_plotlyjs=False, config=config)
+        components_html = pyo.plot(components_fig, output_type='div', include_plotlyjs=False, config=config)
+        cumulative_html = pyo.plot(cumulative_fig, output_type='div', include_plotlyjs=False, config=config)
         price_html = pyo.plot(price_fig, output_type='div', include_plotlyjs=False, config=config)
         options_html = pyo.plot(options_fig, output_type='div', include_plotlyjs=False, config=config)
 
-        print("✅ Enhanced 3-Bar Combined Analysis with Gamma Integration generated successfully")
-        return combined_html, price_html, options_html, gamma_chart
+        print("✅ Enhanced Split Combined Analysis with Gamma Integration generated successfully")
+        print("📊 Chart 1: Futures Flow + Cumulative")
+        print("📊 Chart 2: 3-Bar Component Analysis (Separate)")
+        print("📊 Chart 3: Cumulative Gamma-Enhanced (Separate)")
+
+        return futures_html, components_html, cumulative_html, price_html, options_html, gamma_chart
 
     # USAGE INSTRUCTIONS:
     # 1. Open your enhanced_money_flow_complete.py file
@@ -1828,14 +1856,83 @@ class EnhancedHTMLGenerator:
             </div>
         </div>'''
 
-    
+    def _generate_charts_panel_with_split_gamma(self, futures_chart, components_chart, cumulative_chart, price_chart,
+                                                options_chart, gamma_chart):
+        """Generate enhanced charts panel with SPLIT gamma analysis"""
+        return f'''
+        <div class="charts-panel">
+            <!-- Futures Flow Chart -->
+            <div class="chart-container main-chart">
+                <div class="chart-title">
+                    <i class="fas fa-chart-bar"></i> Futures Money Flow Analysis
+                    <span class="chart-subtitle">Primary Signal Source (70% Weight)</span>
+                </div>
+                {futures_chart}
+            </div>
+
+            <!-- Split Enhanced Combined Analysis Section -->
+            <div class="enhanced-combined-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-layer-group"></i> Enhanced Combined Analysis with Gamma Integration</h2>
+                    <p>Multi-component breakdown with real-time gamma effects</p>
+                </div>
+
+                <!-- 3-Bar Component Analysis -->
+                <div class="chart-container enhanced-chart">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-column"></i> 3-Bar Component Analysis
+                        <span class="chart-subtitle">Futures + Options + Gamma-Enhanced</span>
+                    </div>
+                    {components_chart}
+                </div>
+
+                <!-- Cumulative Trend Analysis -->
+                <div class="chart-container enhanced-chart">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-line"></i> Cumulative Gamma-Enhanced Trend
+                        <span class="chart-subtitle">Running Total & Direction Indicator</span>
+                    </div>
+                    {cumulative_chart}
+                </div>
+            </div>
+
+            <!-- Price and Options Row -->
+            <div class="chart-row">
+                <div class="chart-container half-chart">
+                    <div class="chart-title">
+                        <i class="fas fa-dollar-sign"></i> Price Movement
+                        <span class="chart-subtitle">Real-time Confirmation</span>
+                    </div>
+                    {price_chart}
+                </div>
+
+                <div class="chart-container half-chart">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-line"></i> Options Flow
+                        <span class="chart-subtitle">Sentiment Validation (30% Weight)</span>
+                    </div>
+                    {options_chart}
+                </div>
+            </div>
+
+            <!-- Gamma Pressure Analysis -->
+            <div class="chart-container gamma-chart">
+                <div class="chart-title">
+                    <i class="fas fa-crosshairs"></i> Gamma Pressure Analysis
+                    <span class="chart-subtitle">Support/Resistance Dynamics</span>
+                </div>
+                {gamma_chart}
+            </div>
+        </div>'''
+
     def generate_enhanced_dashboard(self, output_file):
         """Generate complete enhanced HTML dashboard"""
         print(f"🔨 Generating Enhanced Multi-Source Dashboard: {output_file}")
         
         # Generate charts
        # combined_chart, price_chart, options_chart, gamma_chart = self.analyzer.create_enhanced_charts()
-        combined_chart, price_chart, options_chart, gamma_chart = self.analyzer.create_enhanced_charts_with_gamma()
+        #combined_chart, price_chart, options_chart, gamma_chart = self.analyzer.create_enhanced_charts_with_gamma()
+        futures_chart, components_chart, cumulative_chart, price_chart, options_chart, gamma_chart = self.analyzer.create_enhanced_charts_with_gamma()
         # Get current data
         signals = self.analyzer.combined_signals
         alerts = self.analyzer.alerts
@@ -1870,7 +1967,8 @@ class EnhancedHTMLGenerator:
     
     <div class="main-content">
         {self._generate_signals_panel(signals, alerts, stats)} 
-        {self._generate_charts_panel_with_gamma(combined_chart, price_chart, options_chart, gamma_chart)}
+       
+        {self._generate_charts_panel_with_split_gamma(futures_chart, components_chart, cumulative_chart, price_chart, options_chart, gamma_chart)}
     </div>
     
     {self._generate_data_sources_panel()}
