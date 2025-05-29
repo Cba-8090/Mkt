@@ -25,43 +25,120 @@ warnings.filterwarnings('ignore')
 class MultiSourceDataLoader:
     """Enhanced data loader for multiple data sources"""
     
+
+
     def __init__(self):
         self.futures_data = None
         self.options_data = None
         self.gamma_data = None
         self.price_data = None
         self.last_update = {}
-        
-    def load_futures_data(self, csv_path):
-        """Load futures money flow data (70% weight)"""
+
+    def _parse_timestamp_flexible(self, timestamp_series):
+        """Flexible timestamp parsing that handles multiple formats"""
+        print("🔧 Attempting flexible timestamp parsing...")
+
+        # Common timestamp formats to try
+        formats_to_try = [
+            '%Y-%m-%d %H:%M:%S',  # 2025-05-29 09:15:00
+            '%Y-%m-%d %H:%M',  # 2025-05-29 09:15
+            '%d-%m-%Y %H:%M',  # 29-05-2025 09:15
+            '%d-%m-%Y %H:%M:%S',  # 29-05-2025 09:15:00
+            '%d/%m/%Y %H:%M',  # 29/05/2025 09:15
+            '%Y/%m/%d %H:%M',  # 2025/05/29 09:15
+            '%d.%m.%Y %H:%M',  # 29.05.2025 09:15
+        ]
+
+        # Try each format
+        for fmt in formats_to_try:
+            try:
+                parsed_timestamps = pd.to_datetime(timestamp_series, format=fmt)
+                print(f"✅ Successfully parsed timestamps using format: {fmt}")
+                return parsed_timestamps
+            except (ValueError, TypeError) as e:
+                continue
+
+        # If all specific formats fail, try pandas' automatic parsing
         try:
-            print("📊 Loading Futures Money Flow Data...")
+            parsed_timestamps = pd.to_datetime(timestamp_series, infer_datetime_format=True)
+            print("✅ Successfully parsed timestamps using automatic inference")
+            return parsed_timestamps
+        except Exception as e:
+            print(f"❌ All timestamp parsing attempts failed: {e}")
+            raise ValueError(
+                f"Could not parse timestamps. Sample value: {timestamp_series.iloc[0] if len(timestamp_series) > 0 else 'No data'}")
+
+    def load_futures_data(self, csv_path):
+        """Load futures money flow data with flexible timestamp parsing"""
+        try:
+            print("📊 Loading Futures Money Flow Data with flexible timestamp parsing...")
             df = pd.read_csv(csv_path)
-            
+
+            # Display first few rows for debugging
+            print(f"📋 CSV columns: {list(df.columns)}")
+            print(f"📋 First few timestamp values: {df['timestamp'].head(3).tolist()}")
+
             # Validate required columns
             required_cols = ['timestamp', 'weighted_money_flow', 'cumulative_weighted_money_flow',
-                           'weighted_positive_money_flow', 'weighted_negative_money_flow']
-            
-            if not all(col in df.columns for col in required_cols):
-                raise ValueError(f"Missing required columns in futures data")
-            
-            # Convert timestamp
-            df['timestamp'] = pd.to_datetime(df['timestamp'], format='%d-%m-%Y %H:%M')
+                             'weighted_positive_money_flow', 'weighted_negative_money_flow']
+
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            if missing_cols:
+                print(f"⚠️ Missing required columns: {missing_cols}")
+                print(f"📋 Available columns: {list(df.columns)}")
+
+                # Try to map common column name variations
+                column_mapping = {
+                    'time': 'timestamp',
+                    'datetime': 'timestamp',
+                    'date_time': 'timestamp',
+                    'money_flow': 'weighted_money_flow',
+                    'net_flow': 'weighted_money_flow',
+                    'cumulative_flow': 'cumulative_weighted_money_flow',
+                    'cumulative': 'cumulative_weighted_money_flow',
+                    'positive_flow': 'weighted_positive_money_flow',
+                    'negative_flow': 'weighted_negative_money_flow',
+                }
+
+                for old_name, new_name in column_mapping.items():
+                    if old_name in df.columns and new_name not in df.columns:
+                        df = df.rename(columns={old_name: new_name})
+                        print(f"🔄 Mapped column '{old_name}' to '{new_name}'")
+
+                # Check again after mapping
+                missing_cols = [col for col in required_cols if col not in df.columns]
+                if missing_cols:
+                    raise ValueError(f"Still missing required columns after mapping: {missing_cols}")
+
+            # Parse timestamp with flexible approach
+            df['timestamp'] = self._parse_timestamp_flexible(df['timestamp'])
             df = df.sort_values('timestamp')
-            
+
+            # Ensure numeric columns are properly typed
+            numeric_cols = ['weighted_money_flow', 'cumulative_weighted_money_flow',
+                            'weighted_positive_money_flow', 'weighted_negative_money_flow']
+
+            for col in numeric_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            # Remove rows with invalid data
+            df = df.dropna(subset=['weighted_money_flow'])
+
             self.futures_data = df
             self.last_update['futures'] = datetime.now()
             print(f"✅ Loaded {len(df)} futures flow records")
+            print(f"📅 Data range: {df['timestamp'].min()} to {df['timestamp'].max()}")
             return True
-            
+
         except Exception as e:
             print(f"❌ Error loading futures data: {e}")
             return False
 
     def load_options_data(self, csv_path):
-        """Load options money flow data (30% weight) - Enhanced with scaling fix"""
+        """Load options money flow data with flexible timestamp parsing"""
         try:
-            print("📈 Loading Options Money Flow Data...")
+            print("📈 Loading Options Money Flow Data with flexible parsing...")
 
             if not os.path.exists(csv_path):
                 print(f"⚠️ Options data file not found: {csv_path}")
@@ -70,41 +147,51 @@ class MultiSourceDataLoader:
 
             df = pd.read_csv(csv_path)
 
-            # Validate required columns
-            required_cols = ['timestamp', 'net_flow', 'total_flow', 'bullish_flow', 'bearish_flow']
-            missing_cols = [col for col in required_cols if col not in df.columns]
+            print(f"📋 Options CSV columns: {list(df.columns)}")
+            print(f"📋 First few rows:\n{df.head(2)}")
 
+            # Validate required columns with mapping
+            required_cols = ['timestamp', 'net_flow', 'total_flow', 'bullish_flow', 'bearish_flow']
+
+            # Column mapping for options data
+            column_mapping = {
+                'time': 'timestamp',
+                'datetime': 'timestamp',
+                'date_time': 'timestamp',
+                'net_money_flow': 'net_flow',
+                'total_money_flow': 'total_flow',
+                'call_flow': 'bullish_flow',
+                'put_flow': 'bearish_flow',
+            }
+
+            for old_name, new_name in column_mapping.items():
+                if old_name in df.columns and new_name not in df.columns:
+                    df = df.rename(columns={old_name: new_name})
+                    print(f"🔄 Mapped options column '{old_name}' to '{new_name}'")
+
+            missing_cols = [col for col in required_cols if col not in df.columns]
             if missing_cols:
                 print(f"⚠️ Missing columns in options data: {missing_cols}")
                 self._create_dummy_options_data()
                 return True
 
-            # Convert timestamp
+            # Parse timestamp
             if 'timestamp' in df.columns:
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df['timestamp'] = self._parse_timestamp_flexible(df['timestamp'])
                 df = df.sort_values('timestamp')
 
-            # **SCALING FIX**: Detect and correct scale mismatch
+            # Enhanced scaling logic
             if 'net_flow' in df.columns:
-                # Check the scale of the data
                 max_abs_flow = df['net_flow'].abs().max()
-
                 print(f"📊 Original options flow range: ±{max_abs_flow:.2f}")
 
-                # If options flow is much smaller than typical futures flow (millions), scale it up
-                if max_abs_flow < 100_000:  # Less than 100K suggests it needs scaling
-                    # Apply scaling factor to match futures data magnitude
-                    scaling_factor = 1_000_000  # Scale to millions
-
+                if max_abs_flow < 100_000:
+                    scaling_factor = 1_000_000
                     flow_columns = ['net_flow', 'total_flow', 'bullish_flow', 'bearish_flow']
-                    if 'call_buying' in df.columns:
-                        flow_columns.extend(['call_buying', 'put_writing', 'call_short_covering',
-                                             'put_unwinding', 'put_buying', 'call_writing',
-                                             'put_short_covering', 'call_unwinding'])
 
                     for col in flow_columns:
                         if col in df.columns:
-                            df[col] = df[col] * scaling_factor
+                            df[col] = pd.to_numeric(df[col], errors='coerce') * scaling_factor
 
                     print(f"🔧 Applied scaling factor: {scaling_factor:,}")
                     print(f"📊 Scaled options flow range: ±{df['net_flow'].abs().max() / 1_000_000:.2f}M")
@@ -113,7 +200,7 @@ class MultiSourceDataLoader:
 
             self.options_data = df
             self.last_update['options'] = datetime.now()
-            print(f"✅ Loaded {len(df)} options flow records with scaling correction")
+            print(f"✅ Loaded {len(df)} options flow records")
             return True
 
         except Exception as e:
