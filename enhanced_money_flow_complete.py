@@ -1157,12 +1157,421 @@ class EnhancedMoneyFlowAnalyzer:
                 'priority': 'alert-low'
             })
 
+    def create_alternative_3component_chart(self, enhanced_data):
+        """Alternative approach: Time-based scatter plot with different shapes for each component"""
+
+        timestamps = enhanced_data['timestamps']
+
+        # Create figure with time-based x-axis
+        components_fig = go.Figure()
+
+        # Component 1: Futures (Circles)
+        components_fig.add_trace(
+            go.Scatter(
+                x=timestamps,
+                y=enhanced_data['futures_components'],
+                mode='markers+lines',
+                name='Futures Component (70%)',
+                marker=dict(
+                    symbol='circle',
+                    size=12,
+                    color='#1976D2',
+                    opacity=0.8,
+                    line=dict(color='#0D47A1', width=2)
+                ),
+                line=dict(color='#1976D2', width=2, dash='dot'),
+                hovertemplate='<b>Futures Component (70%)</b><br>' +
+                              'Time: %{x}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              'Weight: 70%<br>' +
+                              '<extra></extra>',
+                connectgaps=True
+            )
+        )
+
+        # Component 2: Options (Squares)
+        components_fig.add_trace(
+            go.Scatter(
+                x=timestamps,
+                y=enhanced_data['options_components'],
+                mode='markers+lines',
+                name='Options Component (30%)',
+                marker=dict(
+                    symbol='square',
+                    size=12,
+                    color='#7B1FA2',
+                    opacity=0.8,
+                    line=dict(color='#4A148C', width=2)
+                ),
+                line=dict(color='#7B1FA2', width=2, dash='dash'),
+                hovertemplate='<b>Options Component (30%)</b><br>' +
+                              'Time: %{x}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              'Weight: 30%<br>' +
+                              '<extra></extra>',
+                connectgaps=True
+            )
+        )
+
+        # Component 3: Gamma-Enhanced (Diamonds)
+        components_fig.add_trace(
+            go.Scatter(
+                x=timestamps,
+                y=enhanced_data['gamma_enhanced'],
+                mode='markers+lines',
+                name='Gamma-Enhanced Combined',
+                marker=dict(
+                    symbol='diamond',
+                    size=14,
+                    color=['#E65100' if val > 0 else '#D32F2F' for val in enhanced_data['gamma_enhanced']],
+                    opacity=0.9,
+                    line=dict(color='#BF360C', width=2)
+                ),
+                line=dict(color='#E65100', width=3),
+                hovertemplate='<b>Gamma-Enhanced Combined</b><br>' +
+                              'Time: %{x}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              'Gamma Multiplier: %{customdata[0]:.2f}<br>' +
+                              'Directional Bias: %{customdata[1]:+.1f}M<br>' +
+                              '<extra></extra>',
+                customdata=list(zip(enhanced_data['gamma_multipliers'], enhanced_data['directional_bias'])),
+                connectgaps=True
+            )
+        )
+
+        # Enhanced layout with proper time-based scrolling
+        components_fig.update_layout(
+            title={
+                'text': '3-Component Analysis with Gamma Integration (Time-based View)',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16, 'color': '#e6f1ff'}
+            },
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e6f1ff'),
+            height=500,
+            margin=dict(l=80, r=80, t=100, b=120),
+
+            # Enhanced Y-axis
+            yaxis=dict(
+                title="Component Flow (Millions)",
+                title_font_size=14,
+                tickfont_size=12,
+                gridcolor='rgba(255,255,255,0.1)',
+                zeroline=True,
+                zerolinecolor='rgba(255,255,255,0.3)',
+                zerolinewidth=2
+            ),
+
+            # TIME-BASED X-axis with range slider
+            xaxis=dict(
+                title="Time",
+                title_font_size=14,
+                tickfont_size=10,
+                tickangle=45,
+                # SCROLL FUNCTIONALITY
+                rangeslider=dict(
+                    visible=True,
+                    thickness=0.08,
+                    bgcolor='rgba(255,255,255,0.1)',
+                    bordercolor='rgba(255,255,255,0.3)',
+                    borderwidth=1
+                ),
+                # Show last 2 hours by default
+                range=[timestamps[-24] if len(timestamps) > 24 else timestamps[0], timestamps[-1]],
+                type='date'
+            ),
+
+            # Enhanced legend
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(0,0,0,0.1)',
+                bordercolor='rgba(255,255,255,0.2)',
+                borderwidth=1,
+                font=dict(size=12)
+            ),
+
+            # Improved annotations
+            annotations=[
+                dict(
+                    x=0.5,
+                    y=-0.35,
+                    xref='paper',
+                    yref='paper',
+                    text='⭕ Futures (70%) | ⬜ Options (30%) | 🔶 Gamma-Enhanced | Drag range slider to scroll through time',
+                    showarrow=False,
+                    font=dict(size=11, color='#8892b0'),
+                    xanchor='center'
+                )
+            ],
+
+            hovermode='x unified'  # Show all values at same time
+        )
+
+        return components_fig
+
+    def get_enhanced_css_for_scroll_charts():
+        """Additional CSS for improved chart scrolling"""
+        return '''
+        /* Enhanced chart container for better scroll experience */
+        .enhanced-chart {
+            margin-bottom: 20px;
+            min-height: 500px;
+            background: linear-gradient(135deg, #1e2749 0%, #252b4f 100%);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            border: 1px solid #3b4472;
+        }
+
+        /* Plotly range slider customization */
+        .enhanced-chart .rangeslider-container {
+            margin-top: 10px;
+        }
+
+        .enhanced-chart .rangeslider-slider {
+            border-radius: 4px;
+        }
+
+        /* Improved hover tooltip */
+        .enhanced-chart .hoverlayer .hovertext {
+            background-color: rgba(0,0,0,0.8) !important;
+            border-radius: 8px !important;
+            padding: 8px !important;
+            font-size: 12px !important;
+        }
+
+        /* Chart toolbar enhancements */
+        .enhanced-chart .modebar {
+            background-color: rgba(255,255,255,0.1) !important;
+            border-radius: 4px !important;
+            padding: 4px !important;
+        }
+
+        .enhanced-chart .modebar-btn {
+            color: #e6f1ff !important;
+        }
+
+        .enhanced-chart .modebar-btn:hover {
+            background-color: rgba(255,255,255,0.2) !important;
+        }
+        '''
+    
+    def create_improved_3bar_component_chart(self, enhanced_data):
+        """Create improved 3-bar component chart with better colors, thickness, and scroll"""
+
+        timestamps = enhanced_data['timestamps']
+
+        # Create figure with scrollable range
+        components_fig = go.Figure()
+
+        # Improved bar settings
+        bar_width = 0.6  # Much wider bars for better visibility
+        opacity = 0.85  # Better opacity for clearer colors
+
+        # Get data length for scroll optimization
+        data_length = len(timestamps)
+
+        # Show last 50 bars by default if more than 50 data points
+        if data_length > 50:
+            display_start = data_length - 50
+            display_timestamps = timestamps[display_start:]
+            display_futures = enhanced_data['futures_components'][display_start:]
+            display_options = enhanced_data['options_components'][display_start:]
+            display_gamma = enhanced_data['gamma_enhanced'][display_start:]
+            display_multipliers = enhanced_data['gamma_multipliers'][display_start:]
+            display_bias = enhanced_data['directional_bias'][display_start:]
+        else:
+            display_timestamps = timestamps
+            display_futures = enhanced_data['futures_components']
+            display_options = enhanced_data['options_components']
+            display_gamma = enhanced_data['gamma_enhanced']
+            display_multipliers = enhanced_data['gamma_multipliers']
+            display_bias = enhanced_data['directional_bias']
+
+        # Create time-based x positions for proper grouping
+        x_positions = list(range(len(display_timestamps)))
+
+        # Bar 1: Futures Component (Distinct Blue)
+        components_fig.add_trace(
+            go.Bar(
+                x=[f"{i}-futures" for i in x_positions],  # Unique x for each bar
+                y=display_futures,
+                name='Futures Component (70%)',
+                marker=dict(
+                    color='#1976D2',  # Darker, more distinct blue
+                    opacity=opacity,
+                    line=dict(color='#0D47A1', width=1)  # Border for better definition
+                ),
+                width=bar_width * 0.8,  # Slightly narrower for grouping
+                offsetgroup=1,
+                hovertemplate='<b>Futures Component (70%)</b><br>' +
+                              'Time: %{customdata[0]}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              'Weight: 70%<br>' +
+                              '<extra></extra>',
+                customdata=[[str(t)] for t in display_timestamps],
+                showlegend=True
+            )
+        )
+
+        # Bar 2: Options Component (Distinct Purple)
+        components_fig.add_trace(
+            go.Bar(
+                x=[f"{i}-options" for i in x_positions],
+                y=display_options,
+                name='Options Component (30%)',
+                marker=dict(
+                    color='#7B1FA2',  # Darker, more distinct purple
+                    opacity=opacity,
+                    line=dict(color='#4A148C', width=1)
+                ),
+                width=bar_width * 0.8,
+                offsetgroup=2,
+                hovertemplate='<b>Options Component (30%)</b><br>' +
+                              'Time: %{customdata[0]}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              'Weight: 30%<br>' +
+                              '<extra></extra>',
+                customdata=[[str(t)] for t in display_timestamps],
+                showlegend=True
+            )
+        )
+
+        # Bar 3: Gamma-Enhanced Combined (Distinct Orange/Red)
+        components_fig.add_trace(
+            go.Bar(
+                x=[f"{i}-gamma" for i in x_positions],
+                y=display_gamma,
+                name='Gamma-Enhanced Combined',
+                marker=dict(
+                    color=['#E65100' if val > 0 else '#D32F2F' for val in display_gamma],
+                    # Orange for positive, Red for negative
+                    opacity=opacity,
+                    line=dict(color='#BF360C', width=1)
+                ),
+                width=bar_width * 0.8,
+                offsetgroup=3,
+                hovertemplate='<b>Gamma-Enhanced Combined</b><br>' +
+                              'Time: %{customdata[0]}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              'Gamma Multiplier: %{customdata[1]:.2f}<br>' +
+                              'Directional Bias: %{customdata[2]:+.1f}M<br>' +
+                              '<extra></extra>',
+                customdata=[[str(t), m, b] for t, m, b in zip(display_timestamps, display_multipliers, display_bias)],
+                showlegend=True
+            )
+        )
+
+        # Enhanced layout with scroll and zoom
+        components_fig.update_layout(
+            title={
+                'text': f'3-Bar Component Analysis with Gamma Integration (Showing {len(display_timestamps)} of {data_length} bars)',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16, 'color': '#e6f1ff'}
+            },
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e6f1ff'),
+            height=500,  # Increased height for better visibility
+            margin=dict(l=80, r=80, t=100, b=80),
+
+            # IMPROVED: Grouped bar mode for better organization
+            barmode='group',
+            bargap=0.15,  # Space between groups
+            bargroupgap=0.1,  # Space between bars in a group
+
+            # Enhanced Y-axis
+            yaxis=dict(
+                title="Component Flow (Millions)",
+                title_font_size=14,
+                tickfont_size=12,
+                gridcolor='rgba(255,255,255,0.1)',
+                zeroline=True,
+                zerolinecolor='rgba(255,255,255,0.3)',
+                zerolinewidth=2
+            ),
+
+            # SCROLL FUNCTIONALITY: Enhanced X-axis with range slider
+            xaxis=dict(
+                title="Time Periods",
+                title_font_size=14,
+                tickfont_size=10,
+                tickangle=45,
+                # Add range slider for scrolling
+                rangeslider=dict(
+                    visible=True,
+                    thickness=0.05,
+                    bgcolor='rgba(255,255,255,0.1)',
+                    bordercolor='rgba(255,255,255,0.3)',
+                    borderwidth=1
+                ),
+                # Set default range to show last 20 bars clearly
+                range=[max(0, len(x_positions) - 20), len(x_positions) - 1] if len(x_positions) > 20 else None,
+                type='category'  # Treat as categories for proper grouping
+            ),
+
+            # Enhanced legend
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                bgcolor='rgba(0,0,0,0.1)',
+                bordercolor='rgba(255,255,255,0.2)',
+                borderwidth=1,
+                font=dict(size=12)
+            ),
+
+            # Improved annotations
+            annotations=[
+                dict(
+                    x=0.5,
+                    y=-0.25,
+                    xref='paper',
+                    yref='paper',
+                    text='🔵 Futures (70%) | 🟣 Options (30%) | 🟠 Gamma-Enhanced | Use range slider below to scroll through time',
+                    showarrow=False,
+                    font=dict(size=11, color='#8892b0'),
+                    xanchor='center'
+                )
+            ],
+
+            # Add hover mode
+            hovermode='closest'
+        )
+
+        # Update X-axis to show time labels properly
+        time_labels = [f"{t.strftime('%H:%M')}" for t in display_timestamps]
+
+        # Create custom x-axis labels for each bar group
+        x_labels = []
+        for i, time_label in enumerate(time_labels):
+            x_labels.extend([f"{i}-futures", f"{i}-options", f"{i}-gamma"])
+
+        # Update x-axis with proper time labels
+        components_fig.update_xaxes(
+            tickvals=[f"{i}-options" for i in range(len(time_labels))],  # Use middle bar of each group
+            ticktext=time_labels,
+            tickmode='array'
+        )
+
+        return components_fig
+
+    # CORRECTED: Fixed hover styling without invalid properties
     def create_enhanced_charts_with_gamma(self):
-        """Create enhanced multi-source charts with SPLIT 3-bar gamma-integrated Combined Analysis"""
+        """Create enhanced multi-source charts with SIMPLE WORKING HOVER"""
         if self.data_loader.futures_data is None:
             return "", "", "", "", ""
 
-        print("📊 Creating Enhanced Split Combined Analysis with Gamma Integration...")
+        print("📊 Creating Enhanced Split Combined Analysis with SIMPLE WORKING HOVER...")
 
         # Get live data
         futures_df = self.data_loader.futures_data.iloc[:self.live_data_end_index + 1]
@@ -1214,94 +1623,146 @@ class EnhancedMoneyFlowAnalyzer:
         futures_fig.update_yaxes(title_text="Cumulative (Millions)", secondary_y=True)
         futures_fig.update_xaxes(title_text="Time")
 
-        # Chart 2: NEW - 3-Bar Component Analysis (NO cumulative line)
+        # Chart 2: SIMPLE - 3-Bar Component Analysis with WORKING HOVER
         enhanced_data = self._calculate_enhanced_combined_analysis(futures_df)
 
-        components_fig = go.Figure()
+        # Create subplot with secondary Y-axis for Gamma values
+        components_fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        # Create offset timestamps for 3-bar positioning
         timestamps = enhanced_data['timestamps']
-        bar_width = 0.25
 
-        # Bar 1: Futures Component (Blue)
+        # Bar 1: Futures Component (Blue) - Primary Y-axis
         components_fig.add_trace(
             go.Bar(
                 x=timestamps,
                 y=enhanced_data['futures_components'],
-                name='Futures Component (70%)',
-                marker=dict(color='#2196F3', opacity=0.8),
-                width=bar_width,
-                offset=-0.3,
-                hovertemplate='<b>Futures Component</b><br>%{x}<br>Value: %{y:.2f}M<br>Weight: 70%<extra></extra>'
-            )
+                name='Futures (70%)',
+                marker=dict(
+                    color='#1976D2',
+                    opacity=0.8,
+                    line=dict(color='#0D47A1', width=1)
+                ),
+                width=0.6,
+                offset=-0.2,
+                # SIMPLE: Basic hover template that works
+                hovertemplate='Futures Component (70%)<br>' +
+                              'Time: %{x}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              '<extra></extra>',
+                offsetgroup=1
+            ),
+            secondary_y=False
         )
 
-        # Bar 2: Options Component (Purple)
+        # Bar 2: Options Component (Purple) - Primary Y-axis
         components_fig.add_trace(
             go.Bar(
                 x=timestamps,
                 y=enhanced_data['options_components'],
-                name='Options Component (30%)',
-                marker=dict(color='#9C27B0', opacity=0.8),
-                width=bar_width,
+                name='Options (30%)',
+                marker=dict(
+                    color='#7B1FA2',
+                    opacity=0.8,
+                    line=dict(color='#4A148C', width=1)
+                ),
+                width=0.6,
                 offset=0,
-                hovertemplate='<b>Options Component</b><br>%{x}<br>Value: %{y:.2f}M<br>Weight: 30%<extra></extra>'
-            )
+                # SIMPLE: Basic hover template that works
+                hovertemplate='Options Component (30%)<br>' +
+                              'Time: %{x}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              '<extra></extra>',
+                offsetgroup=2
+            ),
+            secondary_y=False
         )
 
-        # Bar 3: Gamma-Enhanced Combined (Orange)
+        # Bar 3: Gamma-Enhanced Combined (Orange/Red) - SECONDARY Y-axis
         components_fig.add_trace(
             go.Bar(
                 x=timestamps,
                 y=enhanced_data['gamma_enhanced'],
-                name='Gamma-Enhanced Combined',
-                marker=dict(color='#FF6B35', opacity=0.9),
-                width=bar_width,
-                offset=0.3,
-                hovertemplate='<b>Gamma-Enhanced Combined</b><br>%{x}<br>Value: %{y:.2f}M<br>Gamma Multiplier: %{customdata[0]:.2f}<br>Directional Bias: %{customdata[1]:+.1f}M<extra></extra>',
-                customdata=list(zip(enhanced_data['gamma_multipliers'], enhanced_data['directional_bias']))
-            )
+                name='Gamma-Enhanced',
+                marker=dict(
+                    color=['#FF6B35' if val > 0 else '#f44336' for val in enhanced_data['gamma_enhanced']],
+                    opacity=0.8,
+                    line=dict(color='#BF360C', width=1)
+                ),
+                width=0.6,
+                offset=0.2,
+                # SIMPLE: Basic hover template with gamma info
+                hovertemplate='Gamma-Enhanced Combined<br>' +
+                              'Time: %{x}<br>' +
+                              'Value: %{y:.2f}M<br>' +
+                              'Multiplier: %{customdata[0]:.2f}<br>' +
+                              'Bias: %{customdata[1]:+.1f}M<br>' +
+                              '<extra></extra>',
+                customdata=list(zip(enhanced_data['gamma_multipliers'], enhanced_data['directional_bias'])),
+                yaxis='y2',
+                offsetgroup=3
+            ),
+            secondary_y=True
         )
 
+        # SIMPLE: Basic layout without complex hover styling
         components_fig.update_layout(
             title={
-                'text': '3-Bar Component Analysis with Gamma Integration',
+                'text': '3-Bar Component Analysis - Grouped by Timestamp',
                 'x': 0.5,
                 'xanchor': 'center',
-                'font': {'size': 16}
+                'font': {'size': 16, 'color': '#e6f1ff'}
             },
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#e6f1ff'),
-            height=450,
-            margin=dict(l=80, r=80, t=80, b=60),
+            height=500,
+            margin=dict(l=80, r=80, t=100, b=80),
+
+            # SIMPLE: Basic bar grouping
             barmode='group',
-            bargap=0.1,
+            bargap=0.15,
             bargroupgap=0.1,
-            yaxis_title="Component Flow (Millions)",
-            xaxis_title="Time",
+
+            # SIMPLE: Basic legend
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
                 y=1.02,
                 xanchor="center",
-                x=0.5
+                x=0.5,
+                font=dict(size=12)
             ),
-            annotations=[
-                dict(
-                    x=0.5,
-                    y=-0.15,
-                    xref='paper',
-                    yref='paper',
-                    text='🔵 Futures (70%) | 🟣 Options (30%) | 🟠 Gamma-Enhanced',
-                    showarrow=False,
-                    font=dict(size=12, color='#8892b0'),
-                    xanchor='center'
-                )
-            ]
+
+            # SIMPLE: Basic x-axis with scroll
+            xaxis=dict(
+                title="Time",
+                title_font_size=14,
+                tickfont_size=10,
+                tickangle=45,
+                rangeslider=dict(visible=True, thickness=0.06),
+                range=[timestamps[max(0, len(timestamps) - 15)], timestamps[-1]] if len(timestamps) > 15 else None
+            ),
+
+            # SIMPLE: Basic hover mode
+            hovermode='closest'
         )
 
-        # Chart 3: NEW - Cumulative Gamma-Enhanced Analysis (SEPARATE)
+        # Configure Y-axes simply
+        components_fig.update_yaxes(
+            title_text="Futures & Options (Millions)",
+            secondary_y=False,
+            gridcolor='rgba(255,255,255,0.1)'
+        )
+
+        components_fig.update_yaxes(
+            title_text="Gamma-Enhanced (Millions)",
+            secondary_y=True,
+            overlaying='y',
+            side='right',
+            gridcolor='rgba(255,152,0,0.1)'
+        )
+
+        # Chart 3: Cumulative (simple)
         cumulative_fig = go.Figure()
 
         cumulative_fig.add_trace(
@@ -1311,42 +1772,15 @@ class EnhancedMoneyFlowAnalyzer:
                 mode='lines+markers',
                 name='Cumulative Gamma-Enhanced',
                 line=dict(color='#00BCD4', width=4),
-                marker=dict(size=8, color='#00BCD4', line=dict(color='#ffffff', width=2)),
-                hovertemplate='<b>Cumulative Gamma-Enhanced</b><br>%{x}<br>Total: %{y:.2f}M<br>Change: %{customdata:+.2f}M<extra></extra>',
-                customdata=[enhanced_data['gamma_enhanced'][i] for i in range(len(enhanced_data['gamma_enhanced']))]
+                marker=dict(size=8, color='#00BCD4'),
+                hovertemplate='Cumulative Gamma-Enhanced<br>' +
+                              'Time: %{x}<br>' +
+                              'Total: %{y:.2f}M<br>' +
+                              '<extra></extra>'
             )
         )
 
-        # Add zero line for reference
-        cumulative_fig.add_hline(
-            y=0,
-            line_dash="dash",
-            line_color="rgba(255,255,255,0.3)",
-            annotation_text="Zero Line",
-            annotation_position="bottom right"
-        )
-
-        # Add trend zones
-        max_cumulative = max(enhanced_data['cumulative_gamma'])
-        min_cumulative = min(enhanced_data['cumulative_gamma'])
-
-        if max_cumulative > 100:
-            cumulative_fig.add_hrect(
-                y0=100, y1=max_cumulative * 1.1,
-                fillcolor="rgba(76, 175, 80, 0.1)",
-                line_width=0,
-                annotation_text="Strong Bullish Zone",
-                annotation_position="top left"
-            )
-
-        if min_cumulative < -100:
-            cumulative_fig.add_hrect(
-                y0=min_cumulative * 1.1, y1=-100,
-                fillcolor="rgba(244, 67, 54, 0.1)",
-                line_width=0,
-                annotation_text="Strong Bearish Zone",
-                annotation_position="bottom left"
-            )
+        cumulative_fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
 
         cumulative_fig.update_layout(
             title={
@@ -1361,33 +1795,20 @@ class EnhancedMoneyFlowAnalyzer:
             height=400,
             margin=dict(l=80, r=80, t=80, b=60),
             yaxis_title="Cumulative Flow (Millions)",
-            xaxis_title="Time",
-            showlegend=True,
-            annotations=[
-                dict(
-                    x=0.5,
-                    y=-0.15,
-                    xref='paper',
-                    yref='paper',
-                    text='🔷 Running Total of Gamma-Enhanced Combined Flow | Trend Direction Indicator',
-                    showarrow=False,
-                    font=dict(size=12, color='#8892b0'),
-                    xanchor='center'
-                )
-            ]
+            xaxis_title="Time"
         )
 
-        # Create other charts (keep existing implementations)
+        # Create other charts (keep existing)
         price_fig = self._create_enhanced_price_chart()
         options_fig = self._create_enhanced_options_chart()
         gamma_chart = self.create_gamma_pressure_chart()
 
-        # Convert to HTML
+        # Convert to HTML with simple config
         config = {
             'displayModeBar': True,
             'displaylogo': False,
             'responsive': True,
-            'modeBarButtonsToRemove': ['pan2d', 'lasso2d']
+            'scrollZoom': True
         }
 
         futures_html = pyo.plot(futures_fig, output_type='div', include_plotlyjs=False, config=config)
@@ -1396,10 +1817,8 @@ class EnhancedMoneyFlowAnalyzer:
         price_html = pyo.plot(price_fig, output_type='div', include_plotlyjs=False, config=config)
         options_html = pyo.plot(options_fig, output_type='div', include_plotlyjs=False, config=config)
 
-        print("✅ Enhanced Split Combined Analysis with Gamma Integration generated successfully")
-        print("📊 Chart 1: Futures Flow + Cumulative")
-        print("📊 Chart 2: 3-Bar Component Analysis (Separate)")
-        print("📊 Chart 3: Cumulative Gamma-Enhanced (Separate)")
+        print("✅ Enhanced Split Combined Analysis with SIMPLE WORKING HOVER generated successfully")
+        print("🎯 Simplified: Basic hover templates that should work reliably")
 
         return futures_html, components_html, cumulative_html, price_html, options_html, gamma_chart
 
@@ -1419,6 +1838,107 @@ class EnhancedMoneyFlowAnalyzer:
     print("✅ Dual Y-axes: Flow (left) + Cumulative (right)")
     print("✅ Interactive hover: Shows both flow and cumulative values")
     print("✅ Professional styling: Matching your dark theme")
+
+    def _get_enhanced_css_with_hover_fix(self):
+        """Get enhanced CSS with forced hover styling"""
+        base_css = self._get_enhanced_css()
+
+        # Add CSS to force dark hover background
+        hover_fix_css = '''
+        /* FORCE DARK HOVER BACKGROUND */
+        .plotly .hoverlayer .hovertext {
+            background-color: rgba(30, 39, 73, 0.95) !important;
+            border: 1px solid rgba(255,255,255,0.3) !important;
+            border-radius: 6px !important;
+            color: white !important;
+            font-size: 12px !important;
+            padding: 8px !important;
+            font-family: 'Segoe UI', Arial, sans-serif !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+        }
+
+        .plotly .hoverlayer .hovertext path {
+            fill: rgba(30, 39, 73, 0.95) !important;
+            stroke: rgba(255,255,255,0.3) !important;
+        }
+
+        .plotly .hoverlayer .hovertext text {
+            fill: white !important;
+            font-size: 12px !important;
+        }
+
+        .plotly .hoverlayer .hovertext tspan {
+            fill: white !important;
+        }
+
+        /* Ensure hover works on bars */
+        .plotly .bars .trace {
+            pointer-events: all !important;
+        }
+
+        .plotly .barlayer .trace {
+            pointer-events: all !important;
+        }
+
+        /* Enhanced chart hover area */
+        .enhanced-chart .js-plotly-plot {
+            pointer-events: all !important;
+        }
+
+        .enhanced-chart .plotly {
+            pointer-events: all !important;
+        }
+        '''
+
+        return base_css + hover_fix_css
+
+
+
+    def _get_enhanced_css_with_hover_fixes(self):
+        """Enhanced CSS with additional hover fixes"""
+        base_css = self._get_enhanced_css()
+
+        hover_fixes_css = '''
+        /* Enhanced hover tooltip styling */
+        .enhanced-chart .hoverlayer .hovertext {
+            background-color: rgba(30, 39, 73, 0.95) !important;
+            border: 2px solid rgba(255,255,255,0.3) !important;
+            border-radius: 8px !important;
+            padding: 10px !important;
+            font-size: 13px !important;
+            color: white !important;
+            font-family: 'Segoe UI', Arial, sans-serif !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+            backdrop-filter: blur(5px) !important;
+        }
+
+        .enhanced-chart .hoverlayer .hovertext path {
+            fill: rgba(30, 39, 73, 0.95) !important;
+            stroke: rgba(255,255,255,0.3) !important;
+            stroke-width: 2px !important;
+        }
+
+        .enhanced-chart .hoverlayer .hovertext text {
+            fill: white !important;
+        }
+
+        /* Ensure all text in hover is white */
+        .enhanced-chart .hoverlayer .hovertext tspan {
+            fill: white !important;
+        }
+
+        /* Chart container enhancements */
+        .enhanced-chart {
+            background: linear-gradient(135deg, #1e2749 0%, #252b4f 100%);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            border: 1px solid #3b4472;
+        }
+        '''
+
+        return base_css + hover_fixes_css
+
 
     def _calculate_enhanced_combined_analysis(self, futures_df):
         """Calculate enhanced combined analysis with gamma integration for each timestamp"""
@@ -1926,61 +2446,101 @@ class EnhancedHTMLGenerator:
         </div>'''
 
     def generate_enhanced_dashboard(self, output_file):
-        """Generate complete enhanced HTML dashboard"""
-        print(f"🔨 Generating Enhanced Multi-Source Dashboard: {output_file}")
-        
+        """Generate complete enhanced HTML dashboard with HOVER CSS FIX"""
+        print(f"🔨 Generating Enhanced Multi-Source Dashboard with HOVER FIX: {output_file}")
+
         # Generate charts
-       # combined_chart, price_chart, options_chart, gamma_chart = self.analyzer.create_enhanced_charts()
-        #combined_chart, price_chart, options_chart, gamma_chart = self.analyzer.create_enhanced_charts_with_gamma()
         futures_chart, components_chart, cumulative_chart, price_chart, options_chart, gamma_chart = self.analyzer.create_enhanced_charts_with_gamma()
+
         # Get current data
         signals = self.analyzer.combined_signals
         alerts = self.analyzer.alerts
         stats = self._get_enhanced_statistics()
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Generate HTML content
+
+        # Generate HTML content with HOVER CSS FIX
         html_content = f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enhanced Money Flow Dashboard - {datetime.now().strftime('%Y-%m-%d')}</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <style>
-        {self._get_enhanced_css()}
-    </style>
-    <script>
-        // Auto-refresh page every 30 seconds
-        setTimeout(function() {{
-            window.location.reload();
-        }}, 30000);
-        
-        // Enhanced dashboard loaded
-        console.log("Enhanced Multi-Source Dashboard loaded at {current_time}");
-        console.log("Data sources: Futures (70%) + Options (30%) + Gamma + Price");
-    </script>
-</head>
-<body>
-    {self._generate_enhanced_header(signals)}
-    
-    <div class="main-content">
-        {self._generate_signals_panel(signals, alerts, stats)} 
-       
-        {self._generate_charts_panel_with_split_gamma(futures_chart, components_chart, cumulative_chart, price_chart, options_chart, gamma_chart)}
-    </div>
-    
-    {self._generate_data_sources_panel()}
-    {self._generate_footer()}
-</body>
-</html>'''
-        
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Enhanced Money Flow Dashboard - {datetime.now().strftime('%Y-%m-%d')}</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+        <style>
+            {self._get_enhanced_css_with_hover_fix()}
+        </style>
+        <script>
+            // Auto-refresh page every 30 seconds
+            setTimeout(function() {{
+                window.location.reload();
+            }}, 30000);
+
+            // Enhanced dashboard loaded
+            console.log("Enhanced Multi-Source Dashboard with Hover Fix loaded at {current_time}");
+
+            // FORCE HOVER TO WORK - Add event listeners after page loads
+            document.addEventListener('DOMContentLoaded', function() {{
+                console.log('DOM loaded, setting up hover fixes...');
+
+                // Wait for Plotly charts to load
+                setTimeout(function() {{
+                    // Find all plotly divs
+                    var plotlyDivs = document.querySelectorAll('[id^="plotly-div-"]');
+                    console.log('Found', plotlyDivs.length, 'Plotly charts');
+
+                    plotlyDivs.forEach(function(div, index) {{
+                        console.log('Setting up hover for chart', index);
+
+                        // Force hover mode
+                        if (div._fullLayout) {{
+                            div._fullLayout.hovermode = 'closest';
+                        }}
+
+                        // Add mouse events
+                        div.addEventListener('mousemove', function(e) {{
+                            // Force Plotly to show hover
+                            if (window.Plotly && div._fullData) {{
+                                var rect = div.getBoundingClientRect();
+                                var x = e.clientX - rect.left;
+                                var y = e.clientY - rect.top;
+
+                                // Trigger Plotly hover
+                                window.Plotly.Fx.hover(div, {{
+                                    xpx: x,
+                                    ypx: y
+                                }});
+                            }}
+                        }});
+
+                        div.addEventListener('mouseleave', function() {{
+                            if (window.Plotly) {{
+                                window.Plotly.Fx.unhover(div);
+                            }}
+                        }});
+                    }});
+                }}, 2000); // Wait 2 seconds for charts to fully load
+            }});
+        </script>
+    </head>
+    <body>
+        {self._generate_enhanced_header(signals)}
+
+        <div class="main-content">
+            {self._generate_signals_panel(signals, alerts, stats)} 
+            {self._generate_charts_panel_with_split_gamma(futures_chart, components_chart, cumulative_chart, price_chart, options_chart, gamma_chart)}
+        </div>
+
+        {self._generate_data_sources_panel()}
+        {self._generate_footer()}
+    </body>
+    </html>'''
+
         # Write to file
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(html_content)
-            print(f"✅ Enhanced Dashboard generated: {output_file}")
+            print(f"✅ Enhanced Dashboard with HOVER FIX generated: {output_file}")
             return True
         except Exception as e:
             print(f"❌ Error writing HTML file: {e}")
