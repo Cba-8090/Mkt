@@ -517,25 +517,270 @@ class EnhancedMoneyFlowAnalyzer:
             return 0.4
         else:
             return 0.2
-    
+
     def _analyze_gamma_confirmation(self, combined_flow):
-        """Analyze gamma levels for signal confirmation"""
+        """Analyze gamma levels for signal confirmation - Fixed for array data"""
         if self.data_loader.gamma_data is None:
             return "No Data"
-        
+
         gamma = self.data_loader.gamma_data
-        support_pressure = gamma.get('support_pressure', 0.5)
-        resistance_pressure = gamma.get('resistance_pressure', 0.5)
-        
-        if combined_flow > 50 and support_pressure > 0.6:
-            return "Strong Support"
-        elif combined_flow < -50 and resistance_pressure > 0.6:
-            return "Weak Resistance"
-        elif support_pressure > resistance_pressure:
-            return "Support Bias"
-        else:
-            return "Resistance Bias"
-    
+
+        # Get latest gamma values (last element from arrays)
+        try:
+            if isinstance(gamma.get('support_pressure'), np.ndarray) and len(gamma['support_pressure']) > 0:
+                support_pressure = gamma['support_pressure'][-1]  # Get latest value
+            else:
+                support_pressure = gamma.get('support_pressure', 0.5)
+
+            if isinstance(gamma.get('resistance_pressure'), np.ndarray) and len(gamma['resistance_pressure']) > 0:
+                resistance_pressure = gamma['resistance_pressure'][-1]  # Get latest value
+            else:
+                resistance_pressure = gamma.get('resistance_pressure', 0.5)
+
+            if isinstance(gamma.get('sr_ratio'), np.ndarray) and len(gamma['sr_ratio']) > 0:
+                sr_ratio = gamma['sr_ratio'][-1]  # Get latest S/R ratio
+            else:
+                sr_ratio = 1.0
+
+            print(
+                f"🎯 Latest Gamma Values: Support={support_pressure:.2f}M, Resistance={resistance_pressure:.2f}M, S/R Ratio={sr_ratio:.2f}")
+
+            # Analyze based on combined flow and gamma confirmation
+            if combined_flow > 50 and support_pressure > 0.6:
+                return "Strong Support"
+            elif combined_flow < -50 and resistance_pressure > 0.6:
+                return "Weak Resistance"
+            elif sr_ratio > 1.2:  # Support bias when S/R ratio > 1.2
+                return "Support Bias"
+            elif sr_ratio < 0.8:  # Resistance bias when S/R ratio < 0.8
+                return "Resistance Bias"
+            else:
+                return "Neutral"
+
+        except Exception as e:
+            print(f"⚠️ Error analyzing gamma confirmation: {e}")
+            return "Error"
+
+    def create_gamma_pressure_chart(self):
+        """Create gamma pressure chart with improved spacing"""
+        if self.data_loader.gamma_data is None:
+            print("⚠️ No gamma data available for gamma pressure chart")
+            return ""
+
+        print("🎯 Creating Gamma Pressure Analysis Chart with improved layout...")
+
+        gamma_data = self.data_loader.gamma_data
+
+        # Create 3-panel subplot with better spacing
+        gamma_fig = make_subplots(
+            rows=3, cols=1,
+            subplot_titles=[
+                'Support vs Resistance Pressure',
+                'S/R Ratio & Max Pressure Strike',
+                'Price Levels & Reversal Signals'
+            ],
+            vertical_spacing=0.12,  # INCREASED spacing between panels
+            row_heights=[0.4, 0.3, 0.3],
+            specs=[
+                [{"secondary_y": False}],
+                [{"secondary_y": True}],
+                [{"secondary_y": True}]
+            ]
+        )
+
+        # Panel 1: Support vs Resistance Pressure (Filled Area Chart)
+        gamma_fig.add_trace(
+            go.Scatter(
+                x=gamma_data['timestamps'],
+                y=gamma_data['support_pressure'],
+                mode='lines',
+                name='Support Pressure',
+                fill='tonexty',
+                fillcolor='rgba(76, 175, 80, 0.3)',
+                line=dict(color='#4CAF50', width=2),
+                hovertemplate='<b>%{x}</b><br>Support: %{y:.2f}M<extra></extra>'
+            ),
+            row=1, col=1
+        )
+
+        gamma_fig.add_trace(
+            go.Scatter(
+                x=gamma_data['timestamps'],
+                y=gamma_data['resistance_pressure'],
+                mode='lines',
+                name='Resistance Pressure',
+                fill='tozeroy',
+                fillcolor='rgba(244, 67, 54, 0.3)',
+                line=dict(color='#f44336', width=2),
+                hovertemplate='<b>%{x}</b><br>Resistance: %{y:.2f}M<extra></extra>'
+            ),
+            row=1, col=1
+        )
+
+        # Panel 2: S/R Ratio (Primary Y-axis) & Max Pressure Strike (Secondary Y-axis)
+        gamma_fig.add_trace(
+            go.Scatter(
+                x=gamma_data['timestamps'],
+                y=gamma_data['sr_ratio'],
+                mode='lines+markers',
+                name='S/R Ratio',
+                line=dict(color='#FF9800', width=3),
+                marker=dict(size=4),
+                hovertemplate='<b>%{x}</b><br>S/R Ratio: %{y:.2f}<extra></extra>'
+            ),
+            row=2, col=1, secondary_y=False
+        )
+
+        gamma_fig.add_trace(
+            go.Scatter(
+                x=gamma_data['timestamps'],
+                y=gamma_data['max_pressure_strikes'],
+                mode='lines',
+                name='Max Pressure Strike',
+                line=dict(color='#2196F3', width=2, dash='dash'),
+                hovertemplate='<b>%{x}</b><br>Strike: ₹%{y:.0f}<extra></extra>',
+                yaxis='y4'
+            ),
+            row=2, col=1, secondary_y=True
+        )
+
+        # Panel 3: Price Levels & Reversal Signals
+        gamma_fig.add_trace(
+            go.Scatter(
+                x=gamma_data['timestamps'],
+                y=gamma_data['support_levels'],
+                mode='lines',
+                name='Support Level',
+                line=dict(color='#4CAF50', width=2, dash='dot'),
+                hovertemplate='<b>%{x}</b><br>Support: ₹%{y:.0f}<extra></extra>'
+            ),
+            row=3, col=1, secondary_y=False
+        )
+
+        gamma_fig.add_trace(
+            go.Scatter(
+                x=gamma_data['timestamps'],
+                y=gamma_data['resistance_levels'],
+                mode='lines',
+                name='Resistance Level',
+                line=dict(color='#f44336', width=2, dash='dot'),
+                hovertemplate='<b>%{x}</b><br>Resistance: ₹%{y:.0f}<extra></extra>'
+            ),
+            row=3, col=1, secondary_y=False
+        )
+
+        # Add reversal signals as star markers
+        reversal_times = []
+        reversal_prices = []
+        for i, signal in enumerate(gamma_data['reversal_signals']):
+            if signal == 1:
+                reversal_times.append(gamma_data['timestamps'][i])
+                reversal_prices.append(gamma_data['support_levels'][i])
+
+        if reversal_times:
+            gamma_fig.add_trace(
+                go.Scatter(
+                    x=reversal_times,
+                    y=reversal_prices,
+                    mode='markers',
+                    name='Reversal Signals',
+                    marker=dict(
+                        symbol='star',
+                        size=12,
+                        color='#FFD700',
+                        line=dict(color='#FF6B35', width=2)
+                    ),
+                    hovertemplate='<b>%{x}</b><br>Reversal Signal<br>Price: ₹%{y:.0f}<extra></extra>',
+                    yaxis='y6'
+                ),
+                row=3, col=1, secondary_y=True
+            )
+
+        # Update layout with improved spacing and styling
+        gamma_fig.update_layout(
+            title={
+                'text': 'Gamma Pressure Analysis - Multi-Panel View',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16}
+            },
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#e6f1ff'),
+            showlegend=True,
+            height=900,  # INCREASED height for better spacing
+            margin=dict(l=80, r=80, t=100, b=80),  # INCREASED margins
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5
+            )
+        )
+
+        # Update Y-axes labels with better spacing
+        gamma_fig.update_yaxes(title_text="Pressure (Millions)", row=1, col=1, title_font_size=12)
+        gamma_fig.update_yaxes(title_text="S/R Ratio", secondary_y=False, row=2, col=1, title_font_size=12)
+        gamma_fig.update_yaxes(title_text="Strike Price (₹)", secondary_y=True, row=2, col=1, title_font_size=12)
+        gamma_fig.update_yaxes(title_text="Price Levels (₹)", secondary_y=False, row=3, col=1, title_font_size=12)
+        gamma_fig.update_yaxes(title_text="Reversal Signals", secondary_y=True, row=3, col=1, title_font_size=12)
+
+        # Update X-axes
+        gamma_fig.update_xaxes(title_text="Time", row=3, col=1, title_font_size=12)
+
+        # Convert to HTML
+        config = {'displayModeBar': True, 'displaylogo': False, 'responsive': True}
+        gamma_html = pyo.plot(gamma_fig, output_type='div', include_plotlyjs=False, config=config)
+
+        print("✅ Gamma Pressure Analysis Chart with improved spacing generated successfully")
+        return gamma_html
+
+    def _get_gamma_statistics(self):
+        """Extract current gamma statistics for display"""
+        if self.data_loader.gamma_data is None:
+            return {
+                'support_pressure': 0,
+                'resistance_pressure': 0,
+                'sr_ratio': 1.0,
+                'reversal_signals': 0,
+                'max_pressure_strike': 0,
+                'last_update': 'No data'
+            }
+
+        gamma = self.data_loader.gamma_data
+
+        try:
+            # Get latest values from arrays
+            latest_support = gamma['support_pressure'][-1] if len(gamma['support_pressure']) > 0 else 0
+            latest_resistance = gamma['resistance_pressure'][-1] if len(gamma['resistance_pressure']) > 0 else 0
+            latest_sr_ratio = gamma['sr_ratio'][-1] if len(gamma['sr_ratio']) > 0 else 1.0
+            latest_strike = gamma['max_pressure_strikes'][-1] if len(gamma['max_pressure_strikes']) > 0 else 0
+
+            # Count reversal signals
+            reversal_count = np.sum(gamma['reversal_signals']) if len(gamma['reversal_signals']) > 0 else 0
+
+            return {
+                'support_pressure': latest_support,
+                'resistance_pressure': latest_resistance,
+                'sr_ratio': latest_sr_ratio,
+                'reversal_signals': int(reversal_count),
+                'max_pressure_strike': latest_strike,
+                'last_update': gamma.get('last_update', datetime.now()).strftime('%H:%M:%S')
+            }
+
+        except Exception as e:
+            print(f"⚠️ Error extracting gamma statistics: {e}")
+            return {
+                'support_pressure': 0,
+                'resistance_pressure': 0,
+                'sr_ratio': 1.0,
+                'reversal_signals': 0,
+                'max_pressure_strike': 0,
+                'last_update': 'Error'
+            }
+
+
     def _analyze_price_momentum(self):
         """Analyze current price momentum"""
         if self.data_loader.price_data is None or len(self.data_loader.price_data) < 3:
@@ -678,22 +923,28 @@ class EnhancedMoneyFlowAnalyzer:
             })
 
     def create_enhanced_charts(self):
-        """Create comprehensive multi-source charts with cumulative overlays"""
+        """Create comprehensive multi-source charts with improved spacing and layout"""
         if self.data_loader.futures_data is None:
-            return "", "", ""
+            return "", "", "", ""
 
-        print("📊 Creating enhanced multi-source charts with cumulative data...")
+        print("📊 Creating enhanced multi-source charts with improved spacing...")
 
         # Get live data
         futures_df = self.data_loader.futures_data.iloc[:self.live_data_end_index + 1]
 
-        # Chart 1: Combined Money Flow with Cumulative Overlay
+        # Chart 1: Combined Money Flow with Better Spacing
         combined_fig = make_subplots(
             rows=2, cols=1,
-            subplot_titles=['Futures Money Flow (70% Weight) + Cumulative', 'Combined Analysis'],
-            vertical_spacing=0.1,
-            row_heights=[0.6, 0.4],
-            specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
+            subplot_titles=[
+                'Futures Money Flow (70% Weight) + Cumulative',
+                'Combined Analysis'
+            ],
+            vertical_spacing=0.2,  # INCREASED from 0.1 to 0.2 for better spacing
+            row_heights=[0.65, 0.35],  # ADJUSTED: More space for top chart, less for bottom
+            specs=[
+                [{"secondary_y": True}],
+                [{"secondary_y": False}]
+            ]
         )
 
         # Futures flow bars (Primary Y-axis)
@@ -710,7 +961,7 @@ class EnhancedMoneyFlowAnalyzer:
             row=1, col=1, secondary_y=False
         )
 
-        # Futures Cumulative Line (Secondary Y-axis) - Using existing cumulative column
+        # Futures Cumulative Line (Secondary Y-axis)
         combined_fig.add_trace(
             go.Scatter(
                 x=futures_df['timestamp'],
@@ -724,36 +975,80 @@ class EnhancedMoneyFlowAnalyzer:
             row=1, col=1, secondary_y=True
         )
 
-        # Combined signal line (bottom chart)
-        if len(futures_df) > 0:
-            combined_flow_line = [self.combined_signals.get('combined_flow_m', 0)] * len(futures_df)
-            combined_fig.add_trace(
-                go.Scatter(
-                    x=futures_df['timestamp'],
-                    y=combined_flow_line,
-                    mode='lines',
-                    name='Combined Signal',
-                    line=dict(color='#00BCD4', width=3),
-                    hovertemplate='<b>%{x}</b><br>Combined: %{y:.2f}M<extra></extra>'
-                ),
-                row=2, col=1
-            )
+        # Calculate combined signal for each timestamp
+        combined_flow_values = self._calculate_combined_flow_timeseries(futures_df)
 
-        # Update layout for combined chart
+        combined_fig.add_trace(
+            go.Scatter(
+                x=futures_df['timestamp'],
+                y=combined_flow_values,
+                mode='lines',
+                name='Combined Signal',
+                line=dict(color='#00BCD4', width=4),  # INCREASED width for better visibility
+                hovertemplate='<b>%{x}</b><br>Combined: %{y:.2f}M<extra></extra>'
+            ),
+            row=2, col=1
+        )
+
+        # Update layout with improved spacing and margins
         combined_fig.update_layout(
-            title='Multi-Source Money Flow Analysis with Cumulative Trends',
+            title={
+                'text': 'Multi-Source Money Flow Analysis with Cumulative Trends',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16}
+            },
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#e6f1ff'),
-            showlegend=True
+            showlegend=True,
+            height=650,  # INCREASED total height for better proportions
+            margin=dict(
+                l=80,  # Left margin
+                r=80,  # Right margin
+                t=100,  # Top margin (more space for title)
+                b=60  # Bottom margin
+            ),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5
+            )
         )
 
-        # Update Y-axes labels
-        combined_fig.update_yaxes(title_text="Flow (Millions)", secondary_y=False, row=1, col=1)
-        combined_fig.update_yaxes(title_text="Cumulative (Millions)", secondary_y=True, row=1, col=1)
-        combined_fig.update_yaxes(title_text="Combined Flow (M)", row=2, col=1)
+        # Update Y-axes labels with better formatting
+        combined_fig.update_yaxes(
+            title_text="Flow (Millions)",
+            secondary_y=False,
+            row=1, col=1,
+            title_font_size=12,
+            tickfont_size=10
+        )
+        combined_fig.update_yaxes(
+            title_text="Cumulative (Millions)",
+            secondary_y=True,
+            row=1, col=1,
+            title_font_size=12,
+            tickfont_size=10
+        )
+        combined_fig.update_yaxes(
+            title_text="Combined Flow (M)",
+            row=2, col=1,
+            title_font_size=12,
+            tickfont_size=10
+        )
 
-        # Chart 2: Price vs Flow Correlation
+        # Update X-axes with better formatting
+        combined_fig.update_xaxes(
+            title_text="Time",
+            row=2, col=1,
+            title_font_size=12,
+            tickfont_size=10
+        )
+
+        # Chart 2: Price vs Flow Correlation (Improved)
         price_fig = go.Figure()
 
         if self.data_loader.price_data is not None:
@@ -764,20 +1059,27 @@ class EnhancedMoneyFlowAnalyzer:
                 y=price_df['spot_price'],
                 mode='lines',
                 name='Spot Price',
-                line=dict(color='#FFC107', width=2),
+                line=dict(color='#FFC107', width=3),  # INCREASED width
                 hovertemplate='<b>%{x}</b><br>Price: ₹%{y:.2f}<extra></extra>'
             ))
 
         price_fig.update_layout(
-            title='Price Movement Analysis',
+            title={
+                'text': 'Price Movement Analysis',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16}
+            },
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(color='#e6f1ff'),
             yaxis_title="Price (₹)",
-            xaxis_title="Time"
+            xaxis_title="Time",
+            height=400,  # INCREASED height
+            margin=dict(l=60, r=60, t=80, b=60)
         )
 
-        # Chart 3: Options Flow Analysis with Cumulative Overlay
+        # Chart 3: Options Flow Analysis (Improved)
         options_fig = make_subplots(specs=[[{"secondary_y": True}]])
 
         if self.data_loader.options_data is not None:
@@ -817,12 +1119,19 @@ class EnhancedMoneyFlowAnalyzer:
                 secondary_y=True
             )
 
-        # Update options chart layout
+        # Update options chart layout with improved spacing
         options_fig.update_layout(
-            title='Options Money Flow (30% Weight) + Cumulative Trend',
+            title={
+                'text': 'Options Money Flow (30% Weight) + Cumulative Trend',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16}
+            },
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='#e6f1ff')
+            font=dict(color='#e6f1ff'),
+            height=400,  # INCREASED height
+            margin=dict(l=60, r=60, t=80, b=60)
         )
 
         # Update Y-axes for options chart
@@ -830,15 +1139,23 @@ class EnhancedMoneyFlowAnalyzer:
         options_fig.update_yaxes(title_text="Cumulative (Millions)", secondary_y=True)
         options_fig.update_xaxes(title_text="Time")
 
-        # Convert to HTML
-        config = {'displayModeBar': True, 'displaylogo': False, 'responsive': True}
+        # Chart 4: Gamma Pressure Analysis Chart
+        gamma_chart = self.create_gamma_pressure_chart()
+
+        # Convert to HTML with responsive config
+        config = {
+            'displayModeBar': True,
+            'displaylogo': False,
+            'responsive': True,
+            'modeBarButtonsToRemove': ['pan2d', 'lasso2d']
+        }
 
         combined_html = pyo.plot(combined_fig, output_type='div', include_plotlyjs=False, config=config)
         price_html = pyo.plot(price_fig, output_type='div', include_plotlyjs=False, config=config)
         options_html = pyo.plot(options_fig, output_type='div', include_plotlyjs=False, config=config)
 
-        print("✅ Enhanced charts with cumulative overlays generated successfully")
-        return combined_html, price_html, options_html
+        print("✅ Enhanced charts with improved spacing and layout generated successfully")
+        return combined_html, price_html, options_html, gamma_chart
 
     # USAGE INSTRUCTIONS:
     # 1. Open your enhanced_money_flow_complete.py file
@@ -858,19 +1175,184 @@ class EnhancedMoneyFlowAnalyzer:
     print("✅ Professional styling: Matching your dark theme")
 
 
+    def _calculate_combined_flow_timeseries(self, futures_df):
+        """Calculate combined flow for each timestamp (not just latest)"""
+        print("🔄 Calculating dynamic combined flow timeseries...")
+
+        combined_values = []
+
+        for index, futures_row in futures_df.iterrows():
+            # Get futures flow for this timestamp
+            futures_flow_m = futures_row['weighted_money_flow'] / 1_000_000
+
+            # Find corresponding options flow for this timestamp
+            options_flow_m = 0
+            if self.data_loader.options_data is not None:
+                options_df = self.data_loader.options_data
+
+                # Find closest timestamp in options data
+                target_time = futures_row['timestamp']
+
+                # Calculate time differences
+                time_diffs = abs(options_df['timestamp'] - target_time)
+
+                # Find the closest match within 10 minutes
+                if len(time_diffs) > 0:
+                    min_diff_idx = time_diffs.idxmin()
+                    min_diff_seconds = time_diffs.iloc[min_diff_idx].total_seconds()
+
+                    if min_diff_seconds <= 600:  # Within 10 minutes
+                        options_latest = options_df.loc[min_diff_idx]
+                        options_flow_raw = options_latest['net_flow']
+
+                        # Apply same scaling logic as in data loading
+                        if abs(options_flow_raw) < 100_000:
+                            options_flow_raw *= 1_000_000
+
+                        options_flow_m = options_flow_raw / 1_000_000
+
+            # Calculate weighted combined flow for this timestamp
+            combined_flow_m = (futures_flow_m * 0.7) + (options_flow_m * 0.3)
+            combined_values.append(combined_flow_m)
+
+        print(f"✅ Generated {len(combined_values)} combined flow data points")
+        print(f"📊 Combined flow range: {min(combined_values):.2f}M to {max(combined_values):.2f}M")
+
+        return combined_values
+
+    
+    def _calculate_dynamic_combined_signals(self):
+        """Calculate combined signals for all timestamps (enhanced version)"""
+        print("🔄 Calculating dynamic combined signals for all timestamps...")
+
+        if self.data_loader.futures_data is None:
+            return
+
+        futures_df = self.data_loader.futures_data.iloc[:self.live_data_end_index + 1]
+
+        # Store time series data for better analysis
+        self.timeseries_signals = {
+            'timestamps': [],
+            'futures_flows': [],
+            'options_flows': [],
+            'combined_flows': [],
+            'signal_strengths': [],
+            'signal_types': []
+        }
+
+        for index, futures_row in futures_df.iterrows():
+            timestamp = futures_row['timestamp']
+            futures_flow_m = futures_row['weighted_money_flow'] / 1_000_000
+
+            # Find corresponding options flow
+            options_flow_m = 0
+            if self.data_loader.options_data is not None:
+                options_df = self.data_loader.options_data
+                time_diffs = abs(options_df['timestamp'] - timestamp)
+
+                if len(time_diffs) > 0:
+                    min_diff_idx = time_diffs.idxmin()
+                    if time_diffs.iloc[min_diff_idx].total_seconds() <= 600:  # Within 10 minutes
+                        options_latest = options_df.loc[min_diff_idx]
+                        options_flow_raw = options_latest['net_flow']
+
+                        if abs(options_flow_raw) < 100_000:
+                            options_flow_raw *= 1_000_000
+
+                        options_flow_m = options_flow_raw / 1_000_000
+
+            # Calculate combined flow and signal strength
+            combined_flow_m = (futures_flow_m * 0.7) + (options_flow_m * 0.3)
+            signal_strength = self._calculate_signal_strength(combined_flow_m)
+            signal_type = self._determine_signal_type(combined_flow_m, signal_strength)
+
+            # Store in timeseries
+            self.timeseries_signals['timestamps'].append(timestamp)
+            self.timeseries_signals['futures_flows'].append(futures_flow_m)
+            self.timeseries_signals['options_flows'].append(options_flow_m)
+            self.timeseries_signals['combined_flows'].append(combined_flow_m)
+            self.timeseries_signals['signal_strengths'].append(signal_strength)
+            self.timeseries_signals['signal_types'].append(signal_type)
+
+        print(f"✅ Generated dynamic signals for {len(self.timeseries_signals['timestamps'])} timestamps")
+
+        # Update current signals with latest values
+        if len(self.timeseries_signals['timestamps']) > 0:
+            latest_idx = -1
+            latest_timestamp = self.timeseries_signals['timestamps'][latest_idx]
+            latest_futures = self.timeseries_signals['futures_flows'][latest_idx]
+            latest_options = self.timeseries_signals['options_flows'][latest_idx]
+            latest_combined = self.timeseries_signals['combined_flows'][latest_idx]
+            latest_strength = self.timeseries_signals['signal_strengths'][latest_idx]
+
+            # Update combined_signals with latest values
+            self.combined_signals.update({
+                'timestamp': latest_timestamp.strftime('%d-%m-%Y %H:%M'),
+                'futures_flow_m': latest_futures,
+                'options_flow_m': latest_options,
+                'combined_flow_m': latest_combined,
+                'signal_strength': latest_strength,
+                'major_signal': self._determine_signal_type(latest_combined, latest_strength),
+                'confidence': self._calculate_confidence(latest_strength,
+                                                         self._analyze_gamma_confirmation(latest_combined)),
+                'expected_move': self._calculate_expected_move(latest_combined, latest_strength),
+                'expected_duration': self._calculate_expected_duration(abs(latest_combined), latest_strength),
+                'gamma_confirmation': self._analyze_gamma_confirmation(latest_combined),
+                'price_momentum': self._analyze_price_momentum(),
+                'action_color': self._get_action_color(latest_combined)
+            })
+
+
 class EnhancedHTMLGenerator:
     """Enhanced HTML generator for multi-source dashboard"""
     
     def __init__(self, analyzer):
         self.analyzer = analyzer
-        
+
+    def _generate_charts_panel_with_gamma(self, combined_chart, price_chart, options_chart, gamma_chart):
+        """Generate enhanced charts panel with gamma analysis"""
+        return f'''
+        <div class="charts-panel">
+            <div class="chart-container main-chart">
+                <div class="chart-title">
+                    <i class="fas fa-chart-area"></i> Combined Money Flow Analysis
+                    <span class="chart-subtitle">Futures (70%) + Options (30%) Weighted</span>
+                </div>
+                {combined_chart}
+            </div>
+
+            <div class="chart-row">
+                <div class="chart-container half-chart">
+                    <div class="chart-title">
+                        <i class="fas fa-dollar-sign"></i> Price Movement
+                    </div>
+                    {price_chart}
+                </div>
+
+                <div class="chart-container half-chart">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-line"></i> Options Flow
+                    </div>
+                    {options_chart}
+                </div>
+            </div>
+
+            <div class="chart-container gamma-chart">
+                <div class="chart-title">
+                    <i class="fas fa-crosshairs"></i> Gamma Pressure Analysis
+                    <span class="chart-subtitle">Support/Resistance Dynamics</span>
+                </div>
+                {gamma_chart}
+            </div>
+        </div>'''
+
+    
     def generate_enhanced_dashboard(self, output_file):
         """Generate complete enhanced HTML dashboard"""
         print(f"🔨 Generating Enhanced Multi-Source Dashboard: {output_file}")
         
         # Generate charts
-        combined_chart, price_chart, options_chart = self.analyzer.create_enhanced_charts()
-        
+        combined_chart, price_chart, options_chart, gamma_chart = self.analyzer.create_enhanced_charts()
         # Get current data
         signals = self.analyzer.combined_signals
         alerts = self.analyzer.alerts
@@ -904,8 +1386,8 @@ class EnhancedHTMLGenerator:
     {self._generate_enhanced_header(signals)}
     
     <div class="main-content">
-        {self._generate_signals_panel(signals, alerts, stats)}
-        {self._generate_charts_panel(combined_chart, price_chart, options_chart)}
+        {self._generate_signals_panel(signals, alerts, stats)} 
+        {self._generate_charts_panel_with_gamma(combined_chart, price_chart, options_chart, gamma_chart)}
     </div>
     
     {self._generate_data_sources_panel()}
@@ -1196,62 +1678,132 @@ class EnhancedHTMLGenerator:
                 <i class="fas fa-clock"></i> {signals.get('timestamp', 'No data')}
             </div>
         </div>'''
-    
+
     def _generate_source_breakdown(self, signals):
-        """Generate breakdown by data source"""
+        """Generate enhanced breakdown by data source with cumulative values and S/R ratio"""
         futures_flow = signals.get('futures_flow_m', 0)
         options_flow = signals.get('options_flow_m', 0)
         price_momentum = signals.get('price_momentum', 'No Data')
-        
+
+        # Get cumulative values from the data sources
+        futures_cumulative = self._get_latest_cumulative_futures()
+        options_cumulative = self._get_latest_cumulative_options()
+        current_sr_ratio = self._get_current_sr_ratio()
+
         return f'''
         <div class="source-breakdown">
             <div class="breakdown-title">Source Breakdown</div>
-            
+
             <div class="source-item">
                 <div class="source-header">
                     <i class="fas fa-chart-bar"></i>
                     <span>Futures Flow (70%)</span>
                 </div>
-                <div class="source-value" style="color: {'#4CAF50' if futures_flow > 0 else '#f44336'}">
-                    {'+' if futures_flow > 0 else ''}{futures_flow:.2f}M
+                <div class="source-values">
+                    <div class="source-value" style="color: {'#4CAF50' if futures_flow > 0 else '#f44336'}">
+                        {'+' if futures_flow > 0 else ''}{futures_flow:.2f}M
+                    </div>
+                    <div class="cumulative-value" style="color: {'#4CAF50' if futures_cumulative > 0 else '#f44336'}">
+                        ({'+' if futures_cumulative > 0 else ''}{futures_cumulative:.2f})
+                    </div>
                 </div>
                 <div class="source-weight">Weight: 70%</div>
             </div>
-            
+
             <div class="source-item">
                 <div class="source-header">
                     <i class="fas fa-chart-line"></i>
                     <span>Options Flow (30%)</span>
                 </div>
-                <div class="source-value" style="color: {'#4CAF50' if options_flow > 0 else '#f44336'}">
-                    {'+' if options_flow > 0 else ''}{options_flow:.2f}M
+                <div class="source-values">
+                    <div class="source-value" style="color: {'#4CAF50' if options_flow > 0 else '#f44336'}">
+                        {'+' if options_flow > 0 else ''}{options_flow:.2f}M
+                    </div>
+                    <div class="cumulative-value" style="color: {'#4CAF50' if options_cumulative > 0 else '#f44336'}">
+                        ({'+' if options_cumulative > 0 else ''}{options_cumulative:.2f})
+                    </div>
                 </div>
                 <div class="source-weight">Weight: 30%</div>
             </div>
-            
+
             <div class="source-item">
                 <div class="source-header">
                     <i class="fas fa-crosshairs"></i>
                     <span>Gamma Analysis</span>
                 </div>
-                <div class="source-value">
-                    {signals.get('gamma_confirmation', 'No Data')}
+                <div class="source-values">
+                    <div class="source-value">
+                        {signals.get('gamma_confirmation', 'No Data')}
+                    </div>
+                    <div class="sr-ratio-value" style="color: {'#4CAF50' if current_sr_ratio > 1.0 else '#f44336' if current_sr_ratio < 1.0 else '#ff9800'}">
+                        ({current_sr_ratio:.2f})
+                    </div>
                 </div>
                 <div class="source-weight">Validation</div>
             </div>
-            
+
             <div class="source-item">
                 <div class="source-header">
                     <i class="fas fa-trending-up"></i>
                     <span>Price Momentum</span>
                 </div>
-                <div class="source-value">
-                    {price_momentum}
+                <div class="source-values">
+                    <div class="source-value">
+                        {price_momentum}
+                    </div>
                 </div>
                 <div class="source-weight">Confirmation</div>
             </div>
         </div>'''
-    
+
+    def _get_latest_cumulative_futures(self):
+        """Get the latest cumulative futures value"""
+        try:
+            if self.analyzer.data_loader.futures_data is not None:
+                futures_df = self.analyzer.data_loader.futures_data
+                if len(futures_df) > 0:
+                    latest_cumulative = futures_df.iloc[self.analyzer.live_data_end_index][
+                        'cumulative_weighted_money_flow']
+                    return latest_cumulative / 1_000_000  # Convert to millions
+            return 0.0
+        except Exception as e:
+            print(f"⚠️ Error getting cumulative futures: {e}")
+            return 0.0
+
+    def _get_latest_cumulative_options(self):
+        """Get the latest cumulative options value"""
+        try:
+            if self.analyzer.data_loader.options_data is not None:
+                options_df = self.analyzer.data_loader.options_data
+                if len(options_df) > 0:
+                    # Calculate cumulative from net_flow column
+                    scaled_net_flow = options_df['net_flow'].copy()
+                    if scaled_net_flow.abs().max() < 100_000:
+                        scaled_net_flow = scaled_net_flow * 1_000_000
+
+                    cumulative_options = scaled_net_flow.cumsum()
+                    latest_cumulative = cumulative_options.iloc[-1]
+                    return latest_cumulative / 1_000_000  # Convert to millions
+            return 0.0
+        except Exception as e:
+            print(f"⚠️ Error getting cumulative options: {e}")
+            return 0.0
+
+    def _get_current_sr_ratio(self):
+        """Get the current S/R ratio from gamma data"""
+        try:
+            if self.analyzer.data_loader.gamma_data is not None:
+                gamma_data = self.analyzer.data_loader.gamma_data
+                if 'sr_ratio' in gamma_data and len(gamma_data['sr_ratio']) > 0:
+                    # Get the latest S/R ratio
+                    current_ratio = gamma_data['sr_ratio'][-1]
+                    return float(current_ratio)
+            return 1.0  # Default neutral ratio
+        except Exception as e:
+            print(f"⚠️ Error getting S/R ratio: {e}")
+            return 1.0
+
+
     def _generate_enhanced_alerts(self, alerts):
         """Generate enhanced alerts section"""
         alerts_html = ""
@@ -1925,6 +2477,70 @@ class EnhancedHTMLGenerator:
                 grid-template-columns: 1fr;
             }
         }
+        
+        
+        
+        
+    .source-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .source-item:last-child {
+        border-bottom: none;
+    }
+    
+    .source-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+    
+    .source-values {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+        margin-right: 10px;
+    }
+    
+    .source-value {
+        font-weight: 600;
+        font-size: 14px;
+    }
+    
+    .cumulative-value {
+        font-size: 11px;
+        font-weight: 500;
+        opacity: 0.8;
+    }
+    
+    .sr-ratio-value {
+        font-size: 11px;
+        font-weight: 500;
+        opacity: 0.8;
+    }
+    
+    .source-weight {
+        font-size: 11px;
+        color: #8892b0;
+        min-width: 70px;
+        text-align: right;
+    }
+    
+    /* Color coding for values */
+    .source-values .source-value {
+        transition: all 0.3s ease;
+    }
+    
+    .cumulative-value,
+    .sr-ratio-value {
+        transition: all 0.3s ease;
+    }
         '''
 
 
